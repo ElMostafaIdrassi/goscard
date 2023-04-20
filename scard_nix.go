@@ -1139,7 +1139,6 @@ var (
 func Initialize(customLogger Logger, scardLibPaths ...string) (errRet error) {
 	if pcscLib == 0 {
 		// Set logger.
-		logger = NewDefaultLogger(LogLevelInfo)
 		if customLogger != nil {
 			logger = customLogger
 		}

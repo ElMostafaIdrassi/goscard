@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-var logger Logger
+var logger Logger = NewDefaultLogger(LogLevelInfo)
 
 type LogLevel int
 

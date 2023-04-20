@@ -1334,7 +1334,6 @@ var (
 func Initialize(customLogger Logger, scardLibPaths ...string) (errRet error) {
 	if winScard == nil {
 		// Set logger.
-		logger = NewDefaultLogger(LogLevelInfo)
 		if customLogger != nil {
 			logger = customLogger
 		}
