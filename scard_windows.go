@@ -1681,11 +1681,13 @@ func (c *Context) ListReaders(
 		uintptr(unsafe.Pointer(&readersUtf16Len)), /* LPDWORD */
 	)
 	if r != 0 {
-		if winErr := maybePcscErr(r); winErr != nil {
-			msg = winErr
-		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardListReaders() 1st call returned 0x%X [%v]", r, msg)
+		if r != 0x8010002E && r != 0x8010001E { // SCARD_E_NO_READERS_AVAILABLE / SCARD_E_SERVICE_STOPPED
+			if winErr := maybePcscErr(r); winErr != nil {
+				msg = winErr
+			}
+			err = fmt.Errorf("scardListReaders() 1st call returned 0x%X [%v]", r, msg)
+		}
 		return
 	}
 
@@ -1698,11 +1700,13 @@ func (c *Context) ListReaders(
 			uintptr(unsafe.Pointer(&readersUtf16Len)), /* LPDWORD */
 		)
 		if r != 0 {
-			if winErr := maybePcscErr(r); winErr != nil {
-				msg = winErr
-			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardListReaders() 2nd call returned 0x%X [%v]", r, msg)
+			if r != 0x8010002E && r != 0x8010001E { // SCARD_E_NO_READERS_AVAILABLE / SCARD_E_SERVICE_STOPPED
+				if winErr := maybePcscErr(r); winErr != nil {
+					msg = winErr
+				}
+				err = fmt.Errorf("scardListReaders() 2nd call returned 0x%X [%v]", r, msg)
+			}
 			return
 		}
 
