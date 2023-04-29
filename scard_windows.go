@@ -311,7 +311,8 @@ const (
 	//
 	// This is the mask of ISO defined transmission protocols
 	//
-	SCardProtocolTx SCardProtocol = SCardProtocolT0 | SCardProtocolT1
+	SCardProtocolTx  SCardProtocol = SCardProtocolT0 | SCardProtocolT1
+	SCardProtocolAny SCardProtocol = SCardProtocolTx
 
 	//
 	// Use the default transmission parameters / card clock freq.
@@ -323,6 +324,11 @@ const (
 	// Since using the optimal parameters is the default case no bit is defined to be 1
 	//
 	SCardProtocolOptimal SCardProtocol = 0x00000000
+
+	//
+	// T=15 protocol.
+	//
+	SCardProtocolT15 SCardProtocol = 0x00000008
 )
 
 func (p SCardProtocol) String() string {
@@ -336,6 +342,9 @@ func (p SCardProtocol) String() string {
 		}
 		if p&SCardProtocolT1 == SCardProtocolT1 {
 			output += "T1;"
+		}
+		if p&SCardProtocolT15 == SCardProtocolT15 {
+			output += "T15;"
 		}
 		if p&SCardProtocolRaw == SCardProtocolRaw {
 			output += "Raw;"
