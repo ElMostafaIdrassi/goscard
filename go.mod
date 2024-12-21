@@ -1,12 +1,14 @@
 module github.com/ElMostafaIdrassi/goscard
 
-go 1.18
+go 1.23
+
+toolchain go1.23.2
 
 require (
-	github.com/ebitengine/purego v0.3.2
-	github.com/google/uuid v1.3.0
-	github.com/stretchr/testify v1.8.2
-	golang.org/x/sys v0.6.0
+	github.com/ebitengine/purego v0.8.1
+	github.com/google/uuid v1.6.0
+	github.com/stretchr/testify v1.10.0
+	golang.org/x/sys v0.28.0
 )
 
 require (
