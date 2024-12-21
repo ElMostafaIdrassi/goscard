@@ -1541,6 +1541,44 @@ func (c *Context) ListReaders(
 	return
 }
 
+// ListReadersWithCardPresent is a wrapper around SCardListReaders,
+// but only returns readers with a card present and its ATR.
+//
+// This function returns a list of currently available readers on the system
+// which have a card present.
+func (c *Context) ListReadersWithCardPresent(
+	groups []string,
+) (readers []string, atrs []string, ret uint64, err error) {
+	defer func() {
+		if err != nil {
+			logger.Error(err)
+		}
+	}()
+
+	var allReaders []string
+
+	allReaders, ret, err = c.ListReaders(groups)
+	if err != nil {
+		return
+	}
+
+	for _, reader := range allReaders {
+		states := make([]SCardReaderState, 1)
+		states[0].Reader = reader
+		ret, err = c.GetStatusChange(NewTimeout(0), states)
+		if err != nil {
+			logger.Errorf("GetStatusChange failed for reader %s (%v). Skipping it...", reader, err)
+		} else {
+			if states[0].EventState&SCardStatePresent == SCardStatePresent && states[0].EventState&SCardStateMute == 0 {
+				readers = append(readers, reader)
+				atrs = append(atrs, states[0].Atr)
+			}
+		}
+	}
+
+	return
+}
+
 // FreeMemory is a wrapper around SCardFreeMemory.
 //
 // This function releases memory that has been returned from the

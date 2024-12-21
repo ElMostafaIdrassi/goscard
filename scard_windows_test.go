@@ -220,6 +220,58 @@ func TestListReaders(t *testing.T) {
 	}
 }
 
+func TestListReadersWithCardPresent(t *testing.T) {
+	require.NotNil(t, scardEstablishContextProc)
+	require.NotNil(t, scardReleaseContextProc)
+	require.NotNil(t, scardListReadersProc)
+
+	userContext, _, _ := NewContext(SCardScopeUser, nil, nil)
+	systemContext, _, _ := NewContext(SCardScopeSystem, nil, nil)
+	defer userContext.Release()
+	defer systemContext.Release()
+	tests := make(map[string]Context, 2)
+	tests["UserContext"] = userContext
+	tests["SystemContext"] = systemContext
+
+	// We don't use SCardLocalReaders and SCardSystemReaders groups,
+	// as those are legacy special groups that do not contain our reader.
+	readerGroupsArray := make([][]string, 4)
+	readerGroupsArray[0] = nil
+	readerGroupsArray[1] = []string{SCardAllReaders}
+	readerGroupsArray[2] = []string{SCardDefaultReaders}
+	readerGroupsArray[3] = []string{SCardAllReaders, SCardDefaultReaders}
+	testNames := make([]string, 4)
+	testNames[0] = "NoGroups"
+	testNames[1] = "AllReadersGroup"
+	testNames[2] = "DefaultReadersGroup"
+	testNames[3] = "AllReadersGroup+DefaultReadersGroup"
+
+	for testName, testContext := range tests {
+		t.Run(testName, func(t *testing.T) {
+			for i, readerGroups := range readerGroupsArray {
+				t.Run(testNames[i], func(t *testing.T) {
+					readers, atrs, r, err := testContext.ListReadersWithCardPresent(readerGroups)
+					require.Equal(t, uint64(0), r)
+					require.NoError(t, err)
+					if len(readers) == 0 {
+						t.Fatal("No readers found")
+					}
+					bFound := false
+					for i, reader := range readers {
+						t.Log(reader)
+						if reader == yubikeyReaderName && strings.EqualFold(atrs[i], yubikeyAtrStr) {
+							bFound = true
+						}
+					}
+					if !bFound {
+						t.Fatal("Yubikey reader not found")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestListCards(t *testing.T) {
 	require.NotNil(t, scardEstablishContextProc)
 	require.NotNil(t, scardReleaseContextProc)
@@ -754,11 +806,11 @@ func TestLocateCardsByATR(t *testing.T) {
 				}
 			}
 
-			atrMask := SCardAtrMask{}
-			atrMask.Atr = yubikeyAtrStr
-			atrMask.Mask = yubikeyAtrMaskStr
+			atrMasks := make([]SCardAtrMask, 1)
+			atrMasks[0].Atr = yubikeyAtrStr
+			atrMasks[0].Mask = yubikeyAtrMaskStr
 			r, err = testContext.LocateCardsByATR(
-				[]SCardAtrMask{atrMask},
+				atrMasks,
 				scardReaderStates,
 			)
 			if testName == "NoContext" {

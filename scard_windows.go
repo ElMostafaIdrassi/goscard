@@ -483,11 +483,12 @@ var (
 	SCardAttrVendorIFDSerialNo SCardAttr = scardAttrValue(SCardClassVendorInfo, 0x0103)
 	SCardAttrChannelID         SCardAttr = scardAttrValue(SCardClassCommunications, 0x0110)
 	//SCardAttrAsyncProtocolTypes    SCardAttr = scardAttrValue(SCardClassProtocol, 0x0120)
-	SCardAttrDefaultClk           SCardAttr = scardAttrValue(SCardClassProtocol, 0x0121)
-	SCardAttrMaxClk               SCardAttr = scardAttrValue(SCardClassProtocol, 0x0122)
-	SCardAttrDefaultDataRate      SCardAttr = scardAttrValue(SCardClassProtocol, 0x0123)
-	SCardAttrMaxDataRate          SCardAttr = scardAttrValue(SCardClassProtocol, 0x0124)
-	SCardAttrMaxIFSD              SCardAttr = scardAttrValue(SCardClassProtocol, 0x0125)
+	SCardAttrDefaultClk      SCardAttr = scardAttrValue(SCardClassProtocol, 0x0121)
+	SCardAttrMaxClk          SCardAttr = scardAttrValue(SCardClassProtocol, 0x0122)
+	SCardAttrDefaultDataRate SCardAttr = scardAttrValue(SCardClassProtocol, 0x0123)
+	SCardAttrMaxDataRate     SCardAttr = scardAttrValue(SCardClassProtocol, 0x0124)
+	SCardAttrMaxIFSD         SCardAttr = scardAttrValue(SCardClassProtocol, 0x0125)
+	//SCardAttrSyncProtocolTypes     SCardAttr = scardAttrValue(SCardClassProtocol, 0x0126)
 	SCardAttrPowerMgmtSupport     SCardAttr = scardAttrValue(SCardClassPowerMgmt, 0x0131)
 	SCardAttrUserToCardAuthDevice SCardAttr = scardAttrValue(SCardClassSecurity, 0x0140)
 	SCardAttrUserAuthInputDevice  SCardAttr = scardAttrValue(SCardClassSecurity, 0x0142)
@@ -1726,6 +1727,49 @@ func (c *Context) ListReaders(
 				readers = nil
 				err = fmt.Errorf("failed to parse readers names %v (%v))", readersUtf16, err)
 				return
+			}
+		}
+	}
+
+	return
+}
+
+// ListReadersWithCardPresent is a wrapper around SCardListReaders,
+// but only returns readers with a card present and its ATR.
+//
+// This function provides the list of readers with a card present within
+// a set of named reader groups, eliminating duplicates.
+// The caller supplies a list of reader groups, and receives the
+// list of readers within the named groups which have a card present.
+// Unrecognized group names are ignored.
+// This function only returns readers within the named
+// groups that are currently attached to the system and available for use.
+func (c *Context) ListReadersWithCardPresent(
+	groups []string,
+) (readers []string, atrs []string, ret uint64, err error) {
+	defer func() {
+		if err != nil {
+			logger.Error(err)
+		}
+	}()
+
+	var allReaders []string
+
+	allReaders, ret, err = c.ListReaders(groups)
+	if err != nil {
+		return
+	}
+
+	for _, reader := range allReaders {
+		states := make([]SCardReaderState, 1)
+		states[0].Reader = reader
+		ret, err = c.GetStatusChange(NewTimeout(0), states)
+		if err != nil {
+			logger.Errorf("GetStatusChange failed for reader %s (%v). Skipping it...", reader, err)
+		} else {
+			if states[0].EventState&SCardStatePresent == SCardStatePresent && states[0].EventState&SCardStateMute == 0 {
+				readers = append(readers, reader)
+				atrs = append(atrs, states[0].Atr)
 			}
 		}
 	}
