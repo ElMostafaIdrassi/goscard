@@ -270,7 +270,7 @@ func (s *SCardReaderState) toInternal() (scardReaderState, int, error) {
 	if len(s.Atr) > 0 {
 		atrBytes, err := hexStringToByteArray(s.Atr)
 		if err != nil {
-			return scardReaderState{}, 0, fmt.Errorf("failed to parse atr \"%s\" (%v)", s.Atr, err)
+			return scardReaderState{}, 0, fmt.Errorf("failed to parse atr \"%s\" (%w)", s.Atr, err)
 		}
 		copy(atr[:], atrBytes)
 		atrLen = dword(len(atrBytes))
@@ -361,9 +361,9 @@ var (
 
 func maybePcscErr(errNo dword) error {
 	if code, known := scardErrNums[uint64(errNo)]; known {
-		return fmt.Errorf("scard failure: 0x%X (%s) (%s)", errNo, code, PcscStringifyError(uint64(errNo)))
+		return fmt.Errorf("scard failure: 0x%.8X (%s) (%s)", errNo, code, PcscStringifyError(uint64(errNo)))
 	} else {
-		return fmt.Errorf("errno code: 0x%X (%s)", errNo, syscall.Errno(errNo).Error())
+		return fmt.Errorf("errno code: 0x%.8X (%s)", errNo, syscall.Errno(errNo).Error())
 	}
 }
 
@@ -424,6 +424,10 @@ func (s SCardProtocol) String() string {
 		}
 		if s&SCardProtocolT15 == SCardProtocolT15 {
 			output += "T15;"
+		}
+
+		if len(output) > 0 {
+			output = output[:len(output)-1] // Remove last ';'
 		}
 	}
 
@@ -519,6 +523,10 @@ func (s *ReaderState) String() string {
 		output += "Specific;"
 	}
 
+	if len(output) > 0 {
+		output = output[:len(output)-1] // Remove last ';'
+	}
+
 	return output
 }
 
@@ -555,7 +563,7 @@ func (s *SCardState) String() string {
 	output := ""
 
 	if *s == SCardStateUnaware {
-		output += "Unaware;"
+		output += "Unaware"
 	} else {
 		if *s&SCardStateIgnore == SCardStateIgnore {
 			output += "Ignore;"
@@ -589,6 +597,10 @@ func (s *SCardState) String() string {
 		}
 		if *s&SCardStateUnpowered == SCardStateUnpowered {
 			output += "Unpowered;"
+		}
+
+		if len(output) > 0 {
+			output = output[:len(output)-1] // Remove last ';'
 		}
 	}
 
@@ -1359,7 +1371,9 @@ func NewContext(
 
 	logger.Infof("NewContext, IN : (scope=%s, reserved1=%p, reserved2=%p)",
 		scope.String(), reserved1, reserved2)
-	defer func() { logger.Infof("NewContext, OUT: (context=0x%X)", scardContext) }()
+	defer func() {
+		logger.Infof("NewContext, OUT: (context=0x%.8X, ret=0x%.8X)", scardContext, ret)
+	}()
 
 	if scardEstablishContextProc == nil {
 		err = fmt.Errorf("scardEstablishContext() not found in pcsc")
@@ -1378,7 +1392,7 @@ func NewContext(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardEstablishContext() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardEstablishContext() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1399,8 +1413,10 @@ func (c *Context) Release() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("Release, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("Release, OUT : (context=0x%X)", c.ctx) }()
+	logger.Infof("Release, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("Release, OUT : (context=0x%.8X, ret=0x%.8X)", c.ctx, ret)
+	}()
 
 	if scardReleaseContextProc == nil {
 		err = fmt.Errorf("scardReleaseContext() not found in pcsc")
@@ -1416,7 +1432,7 @@ func (c *Context) Release() (ret uint64, err error) {
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardReleaseContext() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardReleaseContext() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1439,8 +1455,10 @@ func (c *Context) IsValid() (isValid bool, ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("IsValid, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("IsValid, OUT: (context=0x%X)", c.ctx) }()
+	logger.Infof("IsValid, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("IsValid, OUT: (context=0x%.8X, isValid=%v, ret=0x%.8X)", c.ctx, isValid, ret)
+	}()
 
 	if scardIsValidContextProc == nil {
 		err = fmt.Errorf("scardIsValidContext() not found in pcsc")
@@ -1456,7 +1474,7 @@ func (c *Context) IsValid() (isValid bool, ret uint64, err error) {
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardIsValidContext() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardIsValidContext() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1481,8 +1499,10 @@ func (c *Context) ListReaders(
 	var readersChars []byte
 	var readersCharsLen dword
 
-	logger.Infof("ListReaders, IN : (context=0x%X, groups=%v)", c.ctx, groups)
-	defer func() { logger.Infof("ListReaders, OUT: (context=0x%X, readers=%v)", c.ctx, readers) }()
+	logger.Infof("ListReaders, IN : (context=0x%.8X, groups=%v)", c.ctx, groups)
+	defer func() {
+		logger.Infof("ListReaders, OUT: (context=0x%.8X, readers=%v, ret=0x%.8X)", c.ctx, readers, ret)
+	}()
 
 	if scardListReadersProc == nil {
 		err = fmt.Errorf("scardListReaders() not found in pcsc")
@@ -1507,7 +1527,7 @@ func (c *Context) ListReaders(
 			if pcscErr := maybePcscErr(r); pcscErr != nil {
 				msg = pcscErr
 			}
-			err = fmt.Errorf("scardListReaders() 1st call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardListReaders() 1st call returned 0x%.8X [%w]", r, msg)
 		}
 		return
 	}
@@ -1527,12 +1547,12 @@ func (c *Context) ListReaders(
 				if pcscErr := maybePcscErr(r); pcscErr != nil {
 					msg = pcscErr
 				}
-				err = fmt.Errorf("scardListReaders() 2nd call returned 0x%X [%v]", r, msg)
+				err = fmt.Errorf("scardListReaders() 2nd call returned 0x%.8X [%w]", r, msg)
 			}
 			return
 		}
 
-		if readersCharsLen > 0 && readersChars != nil {
+		if readersCharsLen > 0 {
 			readersChars = readersChars[:readersCharsLen]
 			readers = multiByteStringToStrings(readersChars)
 		}
@@ -1553,6 +1573,11 @@ func (c *Context) ListReadersWithCardPresent(
 		if err != nil {
 			logger.Error(err)
 		}
+	}()
+
+	logger.Infof("ListReadersWithCardPresent, IN : (context=0x%.8X, groups=%v)", c.ctx, groups)
+	defer func() {
+		logger.Infof("ListReadersWithCardPresent, OUT: (context=0x%.8X, readers=%v, atrs=%v, ret=0x%.8X)", c.ctx, readers, atrs, ret)
 	}()
 
 	var allReaders []string
@@ -1593,8 +1618,10 @@ func (c *Context) FreeMemory(
 		}
 	}()
 
-	logger.Infof("FreeMemory, IN : (context=0x%X, mem=%p)", c.ctx, mem)
-	defer func() { logger.Infof("FreeMemory, OUT: (context=0x%X, mem=%p)", c.ctx, mem) }()
+	logger.Infof("FreeMemory, IN : (context=0x%.8X, mem=%p)", c.ctx, mem)
+	defer func() {
+		logger.Infof("FreeMemory, OUT: (context=0x%.8X, mem=%p, ret=0x%.8X)", c.ctx, mem, ret)
+	}()
 
 	if scardFreeMemoryProc == nil {
 		err = fmt.Errorf("scardFreeMemory() not found in pcsc")
@@ -1611,7 +1638,7 @@ func (c *Context) FreeMemory(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardFreeMemory() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardFreeMemory() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1629,8 +1656,10 @@ func (c *Context) Cancel() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("Cancel, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("Cancel, OUT: (context=0x%X)", c.ctx) }()
+	logger.Infof("Cancel, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("Cancel, OUT: (context=0x%.8X, ret=0x%.8X)", c.ctx, ret)
+	}()
 
 	if scardCancelProc == nil {
 		err = fmt.Errorf("scardCancel() not found in pcsc")
@@ -1646,7 +1675,7 @@ func (c *Context) Cancel() (ret uint64, err error) {
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardCancel() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardCancel() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1672,11 +1701,11 @@ func (c *Context) Connect(
 	var activeProtocol SCardProtocol
 	card.handle = SCardHandle(invalidHandleValue)
 
-	logger.Infof("Connect, IN : (context=0x%X, readerName=%s, shareMode=%s, preferredProtocols=%s)",
+	logger.Infof("Connect, IN : (context=0x%.8X, readerName=%s, shareMode=%s, preferredProtocols=%s)",
 		c.ctx, readerName, shareMode.String(), preferredProtocols.String())
 	defer func() {
-		logger.Infof("Connect, OUT: (context=0x%X, handle=0x%X, protocol=%s)",
-			c.ctx, card.handle, card.activeProtocol.String())
+		logger.Infof("Connect, OUT: (context=0x%.8X, handle=0x%.8X, protocol=%s, ret=0x%.8X)",
+			c.ctx, card.handle, card.activeProtocol.String(), ret)
 	}()
 
 	if scardConnectProc == nil {
@@ -1698,7 +1727,7 @@ func (c *Context) Connect(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardConnect() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardConnect() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1732,10 +1761,10 @@ func (c *Card) Reconnect(
 
 	var activeProtocol SCardProtocol
 
-	logger.Infof("Reconnect, IN : (handle=0x%X, shareMode=%s, preferredProtocols=%s, initialization=%s)",
+	logger.Infof("Reconnect, IN : (handle=0x%.8X, shareMode=%s, preferredProtocols=%s, initialization=%s)",
 		c.handle, shareMode.String(), preferredProtocols.String(), initialization.String())
 	defer func() {
-		logger.Infof("Reconnect, OUT: (handle=0x%X, protocol=%s)", c.handle, c.activeProtocol.String())
+		logger.Infof("Reconnect, OUT: (handle=0x%.8X, protocol=%s, ret=0x%.8X)", c.handle, c.activeProtocol.String(), ret)
 	}()
 
 	if scardReconnectProc == nil {
@@ -1756,7 +1785,7 @@ func (c *Card) Reconnect(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardReconnect() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardReconnect() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1777,9 +1806,11 @@ func (c *Card) Disconnect(
 		}
 	}()
 
-	logger.Infof("Disconnect, IN : (handle=0x%X, scardDisposition=%s)",
+	logger.Infof("Disconnect, IN : (handle=0x%.8X, scardDisposition=%s)",
 		c.handle, scardDisposition.String())
-	defer func() { logger.Infof("Disconnect, OUT: (handle=0x%X)", c.handle) }()
+	defer func() {
+		logger.Infof("Disconnect, OUT: (handle=0x%.8X, ret=0x%.8X)", c.handle, ret)
+	}()
 
 	if scardDisconnectProc == nil {
 		err = fmt.Errorf("scardDisconnect() not found in pcsc")
@@ -1796,7 +1827,7 @@ func (c *Card) Disconnect(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardDisconnect() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardDisconnect() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1820,8 +1851,10 @@ func (c *Card) BeginTransaction() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("BeginTransaction, IN : (handle=0x%X)", c.handle)
-	defer func() { logger.Infof("BeginTransaction, OUT: (handle=0x%X)", c.handle) }()
+	logger.Infof("BeginTransaction, IN : (handle=0x%.8X)", c.handle)
+	defer func() {
+		logger.Infof("BeginTransaction, OUT: (handle=0x%.8X, ret=0x%.8X)", c.handle, ret)
+	}()
 
 	if scardBeginTransactionProc == nil {
 		err = fmt.Errorf("scardBeginTransaction() not found in pcsc")
@@ -1837,7 +1870,7 @@ func (c *Card) BeginTransaction() (ret uint64, err error) {
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardBeginTransaction() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardBeginTransaction() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1859,11 +1892,11 @@ func (c *Card) EndTransaction(
 		}
 	}()
 
-	logger.Infof("EndTransaction, IN : (handle=0x%X, scardDisposition=%s)",
+	logger.Infof("EndTransaction, IN : (handle=0x%.8X, scardDisposition=%s)",
 		c.handle, scardDisposition.String())
 	defer func() {
-		logger.Infof("EndTransaction, IN : (handle=0x%X, scardDisposition=%s)",
-			c.handle, scardDisposition.String())
+		logger.Infof("EndTransaction, OUT : (handle=0x%.8X, scardDisposition=%s, ret=0x%.8X)",
+			c.handle, scardDisposition.String(), ret)
 	}()
 
 	if scardEndTransactionProc == nil {
@@ -1881,7 +1914,7 @@ func (c *Card) EndTransaction(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardEndTransaction() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardEndTransaction() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1914,8 +1947,10 @@ func (c *Card) Status() (cardStatus CardStatus, ret uint64, err error) {
 	var atrBytesLen dword
 	var atrBytesPtr *byte
 
-	logger.Infof("Status, IN : (handle=0x%X)", c.handle)
-	defer func() { logger.Infof("Status, OUT: (handle=0x%X, status=%v)", c.handle, cardStatus) }()
+	logger.Infof("Status, IN : (handle=0x%.8X)", c.handle)
+	defer func() {
+		logger.Infof("Status, OUT: (handle=0x%.8X, status=%+v, ret=0x%.8X)", c.handle, cardStatus, ret)
+	}()
 
 	if scardStatusProc == nil {
 		err = fmt.Errorf("scardStatus() not found in pcsc")
@@ -1937,7 +1972,7 @@ func (c *Card) Status() (cardStatus CardStatus, ret uint64, err error) {
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardStatus() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardStatus() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 	if readerNameCharsLen > 0 || atrBytesLen > 0 {
@@ -1966,7 +2001,7 @@ func (c *Card) Status() (cardStatus CardStatus, ret uint64, err error) {
 				msg = pcscErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardStatus() returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardStatus() returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
@@ -2012,8 +2047,10 @@ func (c *Card) Transmit(
 	var sendBufferPtr *byte
 	var recvBufferPtr *byte
 
-	logger.Infof("Transmit, IN : (handle=0x%X, sendBuffer=%v)", c.handle, sendBuffer)
-	defer func() { logger.Infof("Transmit, OUT: (handle=0x%X, recvBuffer=%v)", c.handle, recvBuffer) }()
+	logger.Infof("Transmit, IN : (handle=0x%.8X, sendBuffer=%X)", c.handle, sendBuffer)
+	defer func() {
+		logger.Infof("Transmit, OUT: (handle=0x%.8X, sendBuffer=%X, recvBuffer=%X, ret=0x%.8X)", c.handle, sendBuffer, recvBuffer, ret)
+	}()
 
 	if scardTransmitProc == nil {
 		err = fmt.Errorf("scardTransmit() not found in pcsc")
@@ -2059,7 +2096,7 @@ func (c *Card) Transmit(
 		}
 		recvBuffer = nil
 		ret = uint64(r)
-		err = fmt.Errorf("scardTransmit() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardTransmit() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2084,8 +2121,10 @@ func (c *Card) GetAttrib(
 
 	var attrBytesLen dword
 
-	logger.Infof("GetAttrib, IN : (handle=0x%X, attrId=%v)", c.handle, attrId)
-	defer func() { logger.Infof("GetAttrib, OUT: (handle=0x%X, attrBytes=%v)", c.handle, attrBytes) }()
+	logger.Infof("GetAttrib, IN : (handle=0x%.8X, attrId=%v)", c.handle, attrId.String())
+	defer func() {
+		logger.Infof("GetAttrib, OUT: (handle=0x%.8X, attrId=%v, attrBytes=%X, ret=0x%.8X)", c.handle, attrId.String(), attrBytes, ret)
+	}()
 
 	if scardGetAttribProc == nil {
 		err = fmt.Errorf("scardGetAttrib() not found in pcsc")
@@ -2104,7 +2143,7 @@ func (c *Card) GetAttrib(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetAttrib() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetAttrib() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2122,7 +2161,7 @@ func (c *Card) GetAttrib(
 				msg = pcscErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardGetAttrib() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardGetAttrib() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
@@ -2151,8 +2190,10 @@ func (c *Card) SetAttrib(
 
 	var attrPtr *byte
 
-	logger.Infof("SetAttrib, IN : (handle=0x%X, attrId=%v, attr=%v)", c.handle, attrId, attr)
-	defer func() { logger.Infof("SetAttrib, OUT: (handle=0x%X, attrId=%v, attr=%v)", c.handle, attrId, attr) }()
+	logger.Infof("SetAttrib, IN : (handle=0x%.8X, attrId=%v, attr=%X)", c.handle, attrId, attr)
+	defer func() {
+		logger.Infof("SetAttrib, OUT: (handle=0x%.8X, attrId=%v, attr=%X, ret=0x%.8X)", c.handle, attrId, attr, ret)
+	}()
 
 	if scardSetAttribProc == nil {
 		err = fmt.Errorf("scardSetAttrib() not found in pcsc")
@@ -2175,7 +2216,7 @@ func (c *Card) SetAttrib(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardSetAttrib() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardSetAttrib() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2195,8 +2236,10 @@ func (c *Context) ListReaderGroups() (groups []string, ret uint64, err error) {
 	var groupsChars []byte
 	var groupsCharsLen dword
 
-	logger.Infof("ListReaderGroups, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("ListReaderGroups, OUT: (context=0x%X, groups=%v)", c.ctx, groups) }()
+	logger.Infof("ListReaderGroups, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("ListReaderGroups, OUT: (context=0x%.8X, groups=%v, ret=0x%.8X)", c.ctx, groups, ret)
+	}()
 
 	if scardListReaderGroupsProc == nil {
 		err = fmt.Errorf("scardListReaderGroups() not found in pcsc")
@@ -2214,7 +2257,7 @@ func (c *Context) ListReaderGroups() (groups []string, ret uint64, err error) {
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardListReaderGroups() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardListReaderGroups() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2231,11 +2274,11 @@ func (c *Context) ListReaderGroups() (groups []string, ret uint64, err error) {
 				msg = pcscErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardListReaderGroups() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardListReaderGroups() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
-		if groupsCharsLen > 0 && groupsChars != nil {
+		if groupsCharsLen > 0 {
 			groupsChars = groupsChars[:groupsCharsLen]
 			groups = multiByteStringToStrings(groupsChars)
 		}

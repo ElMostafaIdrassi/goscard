@@ -273,9 +273,9 @@ var (
 
 func maybePcscErr(errNo uintptr) error {
 	if code, known := scardErrNums[uint64(errNo)]; known {
-		return fmt.Errorf("scard failure: 0x%X (%s) (%s)", errNo, code, syscall.Errno(errNo).Error())
+		return fmt.Errorf("scard failure: 0x%.8X (%s) (%s)", errNo, code, syscall.Errno(errNo).Error())
 	} else {
-		return fmt.Errorf("errno code: 0x%X (%s)", errNo, syscall.Errno(errNo).Error())
+		return fmt.Errorf("errno code: 0x%.8X (%s)", errNo, syscall.Errno(errNo).Error())
 	}
 }
 
@@ -351,6 +351,10 @@ func (p SCardProtocol) String() string {
 		}
 		if p&SCardProtocolDefault == SCardProtocolDefault {
 			output += "Default;"
+		}
+
+		if len(output) > 0 {
+			output = output[:len(output)-1] // Remove last ';'
 		}
 	}
 
@@ -926,12 +930,12 @@ func (s *SCardReaderState) toInternal() (scardReaderState, error) {
 	var atrLen dword
 	readerNameUtf16Ptr, err := stringToUtf16Ptr(s.Reader)
 	if err != nil {
-		return scardReaderState{}, fmt.Errorf("failed to parse reader name \"%s\" (%v)", s.Reader, err)
+		return scardReaderState{}, fmt.Errorf("failed to parse reader name \"%s\" (%w)", s.Reader, err)
 	}
 	if len(s.Atr) > 0 {
 		atrBytes, err = hexStringToByteArray(s.Atr)
 		if err != nil {
-			return scardReaderState{}, fmt.Errorf("failed to parse atr \"%s\" (%v)", s.Atr, err)
+			return scardReaderState{}, fmt.Errorf("failed to parse atr \"%s\" (%w)", s.Atr, err)
 		}
 		copy(atr[:], atrBytes)
 		atrLen = dword(len(atrBytes))
@@ -1031,7 +1035,7 @@ func (s *SCardState) String() string {
 	output := ""
 
 	if *s == SCardStateUnaware {
-		output += "Unaware;"
+		output += "Unaware"
 	} else {
 		if *s&SCardStateIgnore == SCardStateIgnore {
 			output += "Ignore;"
@@ -1065,6 +1069,10 @@ func (s *SCardState) String() string {
 		}
 		if *s&SCardStateUnpowered == SCardStateUnpowered {
 			output += "Unpowered;"
+		}
+
+		if len(output) > 0 {
+			output = output[:len(output)-1] // Remove last ';'
 		}
 	}
 
@@ -1104,11 +1112,11 @@ func (s *SCardAtrMask) toInternal() (scardAtrMask, error) {
 	if s.Atr != "" && s.Mask != "" {
 		atrBytes, err = hexStringToByteArray(s.Atr)
 		if err != nil {
-			return scardAtrMask{}, fmt.Errorf("failed to parse atr \"%s\" (%v)", s.Atr, err)
+			return scardAtrMask{}, fmt.Errorf("failed to parse atr \"%s\" (%w)", s.Atr, err)
 		}
 		maskBytes, err = hexStringToByteArray(s.Mask)
 		if err != nil {
-			return scardAtrMask{}, fmt.Errorf("failed to parse atrmask \"%s\" (%v)", s.Mask, err)
+			return scardAtrMask{}, fmt.Errorf("failed to parse atrmask \"%s\" (%w)", s.Mask, err)
 		}
 
 		copy(atr[:], atrBytes)
@@ -1335,7 +1343,7 @@ var (
 //
 // If customLogger is nil, the library will use its default logger
 // which will print log messages to stderr using INFO log level.
-// To disable logging, a NewDefaultLogger can be passed with LogLevel
+// To disable logging, a Logger instance can be passed with LogLevel
 // set to LogLevelNone.
 //
 // If scardLibPaths is not set, the library will look for
@@ -1357,7 +1365,7 @@ func Initialize(customLogger Logger, scardLibPaths ...string) (errRet error) {
 		// Get System32 directory.
 		systemDirPath, err := windows.GetSystemDirectory()
 		if err != nil {
-			errRet = fmt.Errorf("failed to get system directory: %v", err)
+			errRet = fmt.Errorf("failed to get system directory (%w)", err)
 			return
 		}
 		logger.Debugf("Using system directory \"%s\"", systemDirPath)
@@ -1367,12 +1375,12 @@ func Initialize(customLogger Logger, scardLibPaths ...string) (errRet error) {
 		logger.Debugf("Loading Kernel32 at \"%s\"", kernel32Lib)
 		kernel32, err = windows.LoadDLL(kernel32Lib)
 		if err != nil {
-			errRet = fmt.Errorf("could not load kernel32 library (%v)", err)
+			errRet = fmt.Errorf("could not load kernel32 library (%w)", err)
 			return
 		}
 		getProcAddressProc, err = kernel32.FindProc("GetProcAddress")
 		if err != nil {
-			errRet = fmt.Errorf("could not find \"GetProcAddress\" in kernel32 library (%v)", err)
+			errRet = fmt.Errorf("could not find \"GetProcAddress\" in kernel32 library (%w)", err)
 			return
 		}
 
@@ -1547,7 +1555,9 @@ func NewContext(
 
 	logger.Infof("NewContext, IN : (scope=%s, reserved1=%p, reserved2=%p)",
 		scope.String(), reserved1, reserved2)
-	defer func() { logger.Infof("NewContext, OUT: (context=0x%X)", scardContext) }()
+	defer func() {
+		logger.Infof("NewContext, OUT: (context=0x%.8X, ret=0x%.8X)", scardContext, ret)
+	}()
 
 	if scardEstablishContextProc == nil {
 		err = fmt.Errorf("scardEstablishContext() not found in winscard.dll")
@@ -1565,7 +1575,7 @@ func NewContext(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardEstablishContext() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardEstablishContext() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1586,8 +1596,10 @@ func (c *Context) Release() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("Release, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("Release, OUT : (context=0x%X)", c.ctx) }()
+	logger.Infof("Release, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("Release, OUT : (context=0x%.8X, ret=0x%.8X)", c.ctx, ret)
+	}()
 
 	if scardReleaseContextProc == nil {
 		err = fmt.Errorf("scardReleaseContext() not found in winscard.dll")
@@ -1602,7 +1614,7 @@ func (c *Context) Release() (ret uint64, err error) {
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardReleaseContext() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardReleaseContext() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1621,8 +1633,10 @@ func (c *Context) IsValid() (isValid bool, ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("IsValid, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("IsValid, OUT: (context=0x%X)", c.ctx) }()
+	logger.Infof("IsValid, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("IsValid, OUT: (context=0x%.8X, isValid=%v, ret=0x%.8X)", c.ctx, isValid, ret)
+	}()
 
 	if scardIsValidContextProc == nil {
 		err = fmt.Errorf("scardIsValidContext() not found in winscard.dll")
@@ -1637,7 +1651,7 @@ func (c *Context) IsValid() (isValid bool, ret uint64, err error) {
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardIsValidContext() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardIsValidContext() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1667,8 +1681,10 @@ func (c *Context) ListReaders(
 	var readersUtf16 []uint16
 	var readersUtf16Len dword
 
-	logger.Infof("ListReaders, IN : (context=0x%X, groups=%v)", c.ctx, groups)
-	defer func() { logger.Infof("ListReaders, OUT: (context=0x%X, readers=%v)", c.ctx, readers) }()
+	logger.Infof("ListReaders, IN : (context=0x%.8X, groups=%v)", c.ctx, groups)
+	defer func() {
+		logger.Infof("ListReaders, OUT: (context=0x%.8X, readers=%v, ret=0x%.8X)", c.ctx, readers, ret)
+	}()
 
 	if scardListReadersProc == nil {
 		err = fmt.Errorf("scardListReaders() not found in winscard.dll")
@@ -1678,7 +1694,7 @@ func (c *Context) ListReaders(
 	if len(groups) > 0 {
 		groupsUtf16, err = stringsToMultiUtf16String(groups)
 		if err != nil {
-			err = fmt.Errorf("failed to parse groups (%v)", err)
+			err = fmt.Errorf("failed to parse groups (%w)", err)
 			return
 		}
 		groupsUtf16Ptr = &groupsUtf16[0]
@@ -1696,7 +1712,7 @@ func (c *Context) ListReaders(
 			if winErr := maybePcscErr(r); winErr != nil {
 				msg = winErr
 			}
-			err = fmt.Errorf("scardListReaders() 1st call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardListReaders() 1st call returned 0x%.8X [%w]", r, msg)
 		}
 		return
 	}
@@ -1715,17 +1731,17 @@ func (c *Context) ListReaders(
 				if winErr := maybePcscErr(r); winErr != nil {
 					msg = winErr
 				}
-				err = fmt.Errorf("scardListReaders() 2nd call returned 0x%X [%v]", r, msg)
+				err = fmt.Errorf("scardListReaders() 2nd call returned 0x%.8X [%w]", r, msg)
 			}
 			return
 		}
 
-		if readersUtf16Len > 0 && readersUtf16 != nil {
+		if readersUtf16Len > 0 {
 			readersUtf16 = readersUtf16[:readersUtf16Len]
 			readers, err = multiUtf16StringToStrings(readersUtf16)
 			if err != nil {
 				readers = nil
-				err = fmt.Errorf("failed to parse readers names %v (%v))", readersUtf16, err)
+				err = fmt.Errorf("failed to parse readers names %v (%w)", readersUtf16, err)
 				return
 			}
 		}
@@ -1751,6 +1767,11 @@ func (c *Context) ListReadersWithCardPresent(
 		if err != nil {
 			logger.Error(err)
 		}
+	}()
+
+	logger.Infof("ListReadersWithCardPresent, IN : (context=0x%.8X, groups=%v)", c.ctx, groups)
+	defer func() {
+		logger.Infof("ListReadersWithCardPresent, OUT: (context=0x%.8X, readers=%v, atrs=%v, ret=0x%.8X)", c.ctx, readers, atrs, ret)
 	}()
 
 	var allReaders []string
@@ -1791,8 +1812,10 @@ func (c *Context) FreeMemory(
 		}
 	}()
 
-	logger.Infof("FreeMemory, IN : (context=0x%X, mem=%p)", c.ctx, mem)
-	defer func() { logger.Infof("FreeMemory, OUT: (context=0x%X, mem=%p)", c.ctx, mem) }()
+	logger.Infof("FreeMemory, IN : (context=0x%.8X, mem=%p)", c.ctx, mem)
+	defer func() {
+		logger.Infof("FreeMemory, OUT: (context=0x%.8X, mem=%p, ret=0x%.8X)", c.ctx, mem, ret)
+	}()
 
 	if scardFreeMemoryProc == nil {
 		err = fmt.Errorf("scardFreeMemory() not found in winscard.dll")
@@ -1808,7 +1831,7 @@ func (c *Context) FreeMemory(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardFreeMemory() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardFreeMemory() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1846,9 +1869,11 @@ func (c *Context) GetStatusChange(
 	var internalReaderStates []scardReaderState
 	var internalReaderStatesPtr *scardReaderState
 
-	logger.Infof("GetStatusChange, IN : (context=0x%X, timeout=%vms, readerStates=%v)",
+	logger.Infof("GetStatusChange, IN : (context=0x%.8X, timeout=%vms, readerStates=%+v)",
 		c.ctx, timeout.Milliseconds(), readerStates)
-	defer func() { logger.Infof("GetStatusChange, OUT: (context=0x%X, readerStates=%v)", c.ctx, readerStates) }()
+	defer func() {
+		logger.Infof("GetStatusChange, OUT: (context=0x%.8X, readerStates=%+v, ret=0x%.8X)", c.ctx, readerStates, ret)
+	}()
 
 	if scardGetStatusChangeProc == nil {
 		err = fmt.Errorf("scardGetStatusChange() not found in winscard.dll")
@@ -1877,7 +1902,7 @@ func (c *Context) GetStatusChange(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetStatusChange() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetStatusChange() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1905,8 +1930,10 @@ func (c *Context) Cancel() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("Cancel, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("Cancel, OUT: (context=0x%X)", c.ctx) }()
+	logger.Infof("Cancel, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("Cancel, OUT: (context=0x%.8X, ret=0x%.8X)", c.ctx, ret)
+	}()
 
 	if scardCancelProc == nil {
 		err = fmt.Errorf("scardCancel() not found in winscard.dll")
@@ -1921,7 +1948,7 @@ func (c *Context) Cancel() (ret uint64, err error) {
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardCancel() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardCancel() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -1952,11 +1979,11 @@ func (c *Context) Connect(
 	var readerNamesUtf16Ptr *uint16
 	card.handle = SCardHandle(invalidHandleValue)
 
-	logger.Infof("Connect, IN : (context=0x%X, readerName=%s, shareMode=%s, preferredProtocols=%s)",
+	logger.Infof("Connect, IN : (context=0x%.8X, readerName=%s, shareMode=%s, preferredProtocols=%s)",
 		c.ctx, readerName, shareMode.String(), preferredProtocols.String())
 	defer func() {
-		logger.Infof("Connect, OUT: (context=0x%X, handle=0x%X, protocol=%s)",
-			c.ctx, card.handle, card.activeProtocol.String())
+		logger.Infof("Connect, OUT: (context=0x%.8X, handle=0x%.8X, protocol=%s, ret=0x%.8X)",
+			c.ctx, card.handle, card.activeProtocol.String(), ret)
 	}()
 
 	if scardConnectProc == nil {
@@ -1967,7 +1994,7 @@ func (c *Context) Connect(
 	if len(readerName) > 0 {
 		readerNamesUtf16, err = stringToUtf16(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 		readerNamesUtf16Ptr = (*uint16)(unsafe.Pointer(&readerNamesUtf16[0]))
@@ -1986,7 +2013,7 @@ func (c *Context) Connect(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardConnect() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardConnect() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2017,10 +2044,10 @@ func (c *Card) Reconnect(
 
 	var activeProtocol SCardProtocol
 
-	logger.Infof("Reconnect, IN : (handle=0x%X, shareMode=%s, preferredProtocols=%s, initialization=%s)",
+	logger.Infof("Reconnect, IN : (handle=0x%.8X, shareMode=%s, preferredProtocols=%s, initialization=%s)",
 		c.handle, shareMode.String(), preferredProtocols.String(), initialization.String())
 	defer func() {
-		logger.Infof("Reconnect, OUT: (handle=0x%X, protocol=%s)", c.handle, c.activeProtocol.String())
+		logger.Infof("Reconnect, OUT: (handle=0x%.8X, protocol=%s, ret=0x%.8X)", c.handle, c.activeProtocol.String(), ret)
 	}()
 
 	if scardReconnectProc == nil {
@@ -2040,7 +2067,7 @@ func (c *Card) Reconnect(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardReconnect() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardReconnect() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2063,9 +2090,11 @@ func (c *Card) Disconnect(
 		}
 	}()
 
-	logger.Infof("Disconnect, IN : (handle=0x%X, scardDisposition=%s)",
+	logger.Infof("Disconnect, IN : (handle=0x%.8X, scardDisposition=%s)",
 		c.handle, scardDisposition.String())
-	defer func() { logger.Infof("Disconnect, OUT: (handle=0x%X)", c.handle) }()
+	defer func() {
+		logger.Infof("Disconnect, OUT: (handle=0x%.8X, ret=0x%.8X)", c.handle, ret)
+	}()
 
 	if scardDisconnectProc == nil {
 		err = fmt.Errorf("scardDisconnect() not found in winscard.dll")
@@ -2081,7 +2110,7 @@ func (c *Card) Disconnect(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardDisconnect() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardDisconnect() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2102,8 +2131,10 @@ func (c *Card) BeginTransaction() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("BeginTransaction, IN : (handle=0x%X)", c.handle)
-	defer func() { logger.Infof("BeginTransaction, OUT: (handle=0x%X)", c.handle) }()
+	logger.Infof("BeginTransaction, IN : (handle=0x%.8X)", c.handle)
+	defer func() {
+		logger.Infof("BeginTransaction, OUT: (handle=0x%.8X, ret=0x%.8X)", c.handle, ret)
+	}()
 
 	if scardBeginTransactionProc == nil {
 		err = fmt.Errorf("scardBeginTransaction() not found in winscard.dll")
@@ -2118,7 +2149,7 @@ func (c *Card) BeginTransaction() (ret uint64, err error) {
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardBeginTransaction() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardBeginTransaction() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2139,11 +2170,11 @@ func (c *Card) EndTransaction(
 		}
 	}()
 
-	logger.Infof("EndTransaction, IN : (handle=0x%X, scardDisposition=%s)",
+	logger.Infof("EndTransaction, IN : (handle=0x%.8X, scardDisposition=%s)",
 		c.handle, scardDisposition.String())
 	defer func() {
-		logger.Infof("EndTransaction, IN : (handle=0x%X, scardDisposition=%s)",
-			c.handle, scardDisposition.String())
+		logger.Infof("EndTransaction, OUT : (handle=0x%.8X, scardDisposition=%s, ret=0x%.8X)",
+			c.handle, scardDisposition.String(), ret)
 	}()
 
 	if scardEndTransactionProc == nil {
@@ -2160,7 +2191,7 @@ func (c *Card) EndTransaction(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardEndTransaction() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardEndTransaction() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2191,8 +2222,10 @@ func (c *Card) Status() (cardStatus CardStatus, ret uint64, err error) {
 	var atrBytesLen dword
 	var atrBytesPtr *byte
 
-	logger.Infof("Status, IN : (handle=0x%X)", c.handle)
-	defer func() { logger.Infof("Status, OUT: (handle=0x%X, status=%v)", c.handle, cardStatus) }()
+	logger.Infof("Status, IN : (handle=0x%.8X)", c.handle)
+	defer func() {
+		logger.Infof("Status, OUT: (handle=0x%.8X, status=%+v, ret=0x%.8X)", c.handle, cardStatus, ret)
+	}()
 
 	if scardStatusProc == nil {
 		err = fmt.Errorf("scardStatus() not found in winscard.dll")
@@ -2213,7 +2246,7 @@ func (c *Card) Status() (cardStatus CardStatus, ret uint64, err error) {
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardStatus() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardStatus() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 	if readerNamesUtf16Len > 0 || atrBytesLen > 0 {
@@ -2240,7 +2273,7 @@ func (c *Card) Status() (cardStatus CardStatus, ret uint64, err error) {
 				msg = winErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardStatus() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardStatus() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
@@ -2248,7 +2281,7 @@ func (c *Card) Status() (cardStatus CardStatus, ret uint64, err error) {
 			readerNamesUtf16 = readerNamesUtf16[:readerNamesUtf16Len]
 			readerNames, err = multiUtf16StringToStrings(readerNamesUtf16)
 			if err != nil {
-				err = fmt.Errorf("failed to parse reader names %v (%v)", readerNamesUtf16, err)
+				err = fmt.Errorf("failed to parse reader names %v (%w)", readerNamesUtf16, err)
 				return
 			}
 
@@ -2289,8 +2322,10 @@ func (c *Card) Transmit(
 	var sendBufferPtr *byte
 	var recvBufferPtr *byte
 
-	logger.Infof("Transmit, IN : (handle=0x%X, sendBuffer=%v)", c.handle, sendBuffer)
-	defer func() { logger.Infof("Transmit, OUT: (handle=0x%X, recvBuffer=%v)", c.handle, recvBuffer) }()
+	logger.Infof("Transmit, IN : (handle=0x%.8X, sendBuffer=%X)", c.handle, sendBuffer)
+	defer func() {
+		logger.Infof("Transmit, OUT: (handle=0x%.8X, sendBuffer=%X, recvBuffer=%X, ret=0x%.8X)", c.handle, sendBuffer, recvBuffer, ret)
+	}()
 
 	if scardTransmitProc == nil {
 		err = fmt.Errorf("scardTransmit() not found in winscard.dll")
@@ -2335,7 +2370,7 @@ func (c *Card) Transmit(
 		}
 		recvBuffer = nil
 		ret = uint64(r)
-		err = fmt.Errorf("scardTransmit() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardTransmit() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2370,8 +2405,10 @@ func (c *Card) Control(
 	var outBufferPtr *byte
 	var bytesReturned dword
 
-	logger.Infof("Control, IN : (handle=0x%X, inBuffer=%v)", c.handle, inBuffer)
-	defer func() { logger.Infof("Control, OUT: (handle=0x%X, outBuffer=%v)", c.handle, outBuffer) }()
+	logger.Infof("Control, IN : (handle=0x%.8X, controlCode=0x%.8X, inBuffer=%X)", c.handle, scardControlCode, inBuffer)
+	defer func() {
+		logger.Infof("Control, OUT: (handle=0x%.8X, controlCode=0x%.8X, inBuffer=%X, outBuffer=%X, ret=0x%.8X)", c.handle, scardControlCode, inBuffer, outBuffer, ret)
+	}()
 
 	if scardControlProc == nil {
 		err = fmt.Errorf("scardControl() not found in winscard.dll")
@@ -2416,7 +2453,7 @@ func (c *Card) Control(
 		}
 		outBuffer = nil
 		ret = uint64(r)
-		err = fmt.Errorf("scardControl() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardControl() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2443,8 +2480,10 @@ func (c *Card) GetAttrib(
 
 	var attrBytesLen dword
 
-	logger.Infof("GetAttrib, IN : (handle=0x%X, attrId=%v)", c.handle, attrId)
-	defer func() { logger.Infof("GetAttrib, OUT: (handle=0x%X, attrBytes=%v)", c.handle, attrBytes) }()
+	logger.Infof("GetAttrib, IN : (handle=0x%.8X, attrId=%v)", c.handle, attrId.String())
+	defer func() {
+		logger.Infof("GetAttrib, OUT: (handle=0x%.8X, attrId=%v, attrBytes=%X, ret=0x%.8X)", c.handle, attrId.String(), attrBytes, ret)
+	}()
 
 	if scardGetAttribProc == nil {
 		err = fmt.Errorf("scardGetAttrib() not found in winscard.dll")
@@ -2462,7 +2501,7 @@ func (c *Card) GetAttrib(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetAttrib() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetAttrib() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2479,7 +2518,7 @@ func (c *Card) GetAttrib(
 				msg = winErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardGetAttrib() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardGetAttrib() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
@@ -2512,8 +2551,10 @@ func (c *Card) SetAttrib(
 
 	var attrPtr *byte
 
-	logger.Infof("SetAttrib, IN : (handle=0x%X, attrId=%v, attr=%v)", c.handle, attrId, attr)
-	defer func() { logger.Infof("SetAttrib, OUT: (handle=0x%X, attrId=%v, attr=%v)", c.handle, attrId, attr) }()
+	logger.Infof("SetAttrib, IN : (handle=0x%.8X, attrId=%v, attr=%X)", c.handle, attrId, attr)
+	defer func() {
+		logger.Infof("SetAttrib, OUT: (handle=0x%.8X, attrId=%v, attr=%X, ret=0x%.8X)", c.handle, attrId, attr, ret)
+	}()
 
 	if scardSetAttribProc == nil {
 		err = fmt.Errorf("scardSetAttrib() not found in winscard.dll")
@@ -2535,7 +2576,7 @@ func (c *Card) SetAttrib(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardSetAttrib() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardSetAttrib() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2556,8 +2597,10 @@ func (c *Context) ListReaderGroups() (groups []string, ret uint64, err error) {
 	var groupsUtf16 []uint16
 	var groupsUtf16Len dword
 
-	logger.Infof("ListReaderGroups, IN : (context=0x%X)", c.ctx)
-	defer func() { logger.Infof("ListReaderGroups, OUT: (context=0x%X, groups=%v)", c.ctx, groups) }()
+	logger.Infof("ListReaderGroups, IN : (context=0x%.8X)", c.ctx)
+	defer func() {
+		logger.Infof("ListReaderGroups, OUT: (context=0x%.8X, groups=%v, ret=0x%.8X)", c.ctx, groups, ret)
+	}()
 
 	if scardListReaderGroupsProc == nil {
 		err = fmt.Errorf("scardListReaderGroups() not found in winscard.dll")
@@ -2574,7 +2617,7 @@ func (c *Context) ListReaderGroups() (groups []string, ret uint64, err error) {
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardListReaderGroups() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardListReaderGroups() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2590,16 +2633,16 @@ func (c *Context) ListReaderGroups() (groups []string, ret uint64, err error) {
 				msg = winErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardListReaderGroups() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardListReaderGroups() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
-		if groupsUtf16Len > 0 && groupsUtf16 != nil {
+		if groupsUtf16Len > 0 {
 			groupsUtf16 = groupsUtf16[:groupsUtf16Len]
 			groups, err = multiUtf16StringToStrings(groupsUtf16)
 			if err != nil {
 				groups = nil
-				err = fmt.Errorf("failed to parse groups names %v (%v))", groupsUtf16, err)
+				err = fmt.Errorf("failed to parse groups names %v (%w)", groupsUtf16, err)
 				return
 			}
 
@@ -2620,8 +2663,10 @@ func (c *Card) CancelTransaction() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("CancelTransaction, IN : (handle=0x%X)", c.handle)
-	defer func() { logger.Infof("CancelTransaction, OUT: (handle=0x%X)", c.handle) }()
+	logger.Infof("CancelTransaction, IN : (handle=0x%.8X)", c.handle)
+	defer func() {
+		logger.Infof("CancelTransaction, OUT: (handle=0x%.8X, ret=0x%.8X)", c.handle, ret)
+	}()
 
 	if scardCancelTransactionProc == nil {
 		err = fmt.Errorf("scardCancelTransaction() not found in winscard.dll")
@@ -2636,7 +2681,7 @@ func (c *Card) CancelTransaction() (ret uint64, err error) {
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardCancelTransaction() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardCancelTransaction() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2655,8 +2700,10 @@ func (c *Card) GetTransmitCount() (transmitCount dword, ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("GetTransmitCount, IN : (handle=0x%X)", c.handle)
-	defer func() { logger.Infof("GetTransmitCount, OUT: (handle=0x%X, count=%v)", transmitCount) }()
+	logger.Infof("GetTransmitCount, IN : (handle=0x%.8X)", c.handle)
+	defer func() {
+		logger.Infof("GetTransmitCount, OUT: (handle=0x%.8X, count=%v, ret=0x%.8X)", c.handle, transmitCount, ret)
+	}()
 
 	if scardGetTransmitCountProc == nil {
 		err = fmt.Errorf("scardGetTransmitCount() not found in winscard.dll")
@@ -2673,7 +2720,7 @@ func (c *Card) GetTransmitCount() (transmitCount dword, ret uint64, err error) {
 		}
 		transmitCount = 0
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetTransmitCount() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetTransmitCount() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2693,8 +2740,10 @@ func AccessStartedEvent() (eventHandle windows.Handle, ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("AccessStartedEvent, IN : ")
-	defer func() { logger.Infof("AccessStartedEvent, OUT: (handle=x%X)", eventHandle) }()
+	logger.Infof("AccessStartedEvent, IN : (handle=0x%.8X)", eventHandle)
+	defer func() {
+		logger.Infof("AccessStartedEvent, OUT: (handle=0x%.8X, ret=0x%.8X)", eventHandle, ret)
+	}()
 
 	if scardAccessStartedEventProc == nil {
 		err = fmt.Errorf("scardAccessStartedEvent() not found in winscard.dll")
@@ -2704,7 +2753,7 @@ func AccessStartedEvent() (eventHandle windows.Handle, ret uint64, err error) {
 	r, _, msg := scardAccessStartedEventProc.Call()
 	if r == 0 {
 		ret = uint64(r)
-		err = fmt.Errorf("scardAccessStartedEvent() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardAccessStartedEvent() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2725,7 +2774,9 @@ func ReleaseStartedEvent() (ret uint64, err error) {
 	}()
 
 	logger.Infof("ReleaseStartedEvent, IN : ")
-	defer func() { logger.Infof("ReleaseStartedEvent, OUT: ") }()
+	defer func() {
+		logger.Infof("ReleaseStartedEvent, OUT: (ret=0x%.8X)", ret)
+	}()
 
 	if scardReleaseStartedEventProc == nil {
 		err = fmt.Errorf("scardReleaseStartedEvent() not found in winscard.dll")
@@ -2734,7 +2785,7 @@ func ReleaseStartedEvent() (ret uint64, err error) {
 
 	r, _, msg := scardAccessStartedEventProc.Call()
 	if msg != windows.Errno(0) {
-		err = fmt.Errorf("scardAccessStartedEvent() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardAccessStartedEvent() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2765,11 +2816,11 @@ func (c *Context) LocateCards(
 	var internalReaderStates []scardReaderState
 	var internalReaderStatesPtr *scardReaderState
 
-	logger.Infof("LocateCards, IN : (context=0x%X, cardsNames=%v, readerStates=%v)",
+	logger.Infof("LocateCards, IN : (context=0x%.8X, cardsNames=%v, readerStates=%+v)",
 		c.ctx, cardsNames, readerStates)
 	defer func() {
-		logger.Infof("LocateCards, OUT: (context=0x%X, cardsNames=%v, readerStates=%v)",
-			c.ctx, cardsNames, readerStates)
+		logger.Infof("LocateCards, OUT: (context=0x%.8X, cardsNames=%v, readerStates=%+v, ret=0x%.8X)",
+			c.ctx, cardsNames, readerStates, ret)
 	}()
 
 	if scardLocateCardsProc == nil {
@@ -2780,7 +2831,7 @@ func (c *Context) LocateCards(
 	if len(cardsNames) > 0 {
 		cardsNamesUtf16, err = stringsToMultiUtf16String(cardsNames)
 		if err != nil {
-			err = fmt.Errorf("failed to parse cards names %v (%v)", cardsNames, err)
+			err = fmt.Errorf("failed to parse cards names %v (%w)", cardsNames, err)
 			return
 		}
 
@@ -2809,7 +2860,7 @@ func (c *Context) LocateCards(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardLocateCards() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardLocateCards() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2845,11 +2896,11 @@ func (c *Context) LocateCardsByATR(
 	var internalReaderStates []scardReaderState
 	var internalReaderStatesPtr *scardReaderState
 
-	logger.Infof("LocateCardsByATR, IN : (context=0x%X, atrMasks=%v, readerStates=%v)",
+	logger.Infof("LocateCardsByATR, IN : (context=0x%.8X, atrMasks=%+v, readerStates=%+v)",
 		c.ctx, atrMasks, readerStates)
 	defer func() {
-		logger.Infof("LocateCardsByATR, OUT: (context=0x%X, atrMasks=%v, readerStates=%v)",
-			c.ctx, atrMasks, readerStates)
+		logger.Infof("LocateCardsByATR, OUT: (context=0x%.8X, atrMasks=%+v, readerStates=%+v, ret=0x%.8X)",
+			c.ctx, atrMasks, readerStates, ret)
 	}()
 
 	if scardLocateCardsByATRProc == nil {
@@ -2891,7 +2942,7 @@ func (c *Context) LocateCardsByATR(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardLocateCardsByATR() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardLocateCardsByATR() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2928,11 +2979,11 @@ func (c *Context) ListCards(
 	var cardsUtf16Len dword
 	var cardsUtf16 []uint16
 
-	logger.Infof("ListCards, IN : (context=0x%X, atr=%v, guidInterfaces=%v)",
+	logger.Infof("ListCards, IN : (context=0x%.8X, atr=%v, guidInterfaces=%v)",
 		c.ctx, atr, guidInterfaces)
 	defer func() {
-		logger.Infof("ListCards, OUT: (context=0x%X, cards=%v)",
-			c.ctx, cards)
+		logger.Infof("ListCards, OUT: (context=0x%.8X, cards=%v, ret=0x%.8X)",
+			c.ctx, cards, ret)
 	}()
 
 	if scardListCardsProc == nil {
@@ -2943,7 +2994,7 @@ func (c *Context) ListCards(
 	if atr != "" {
 		atrBytes, err = hexStringToByteArray(atr)
 		if err != nil {
-			err = fmt.Errorf("failed to parse atr \"%s\" (%v)", atr, err)
+			err = fmt.Errorf("failed to parse atr \"%s\" (%w)", atr, err)
 			return
 		}
 		atrBytesPtr = (*byte)(unsafe.Pointer(&atrBytes[0]))
@@ -2966,7 +3017,7 @@ func (c *Context) ListCards(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardListCards() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardListCards() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -2985,16 +3036,16 @@ func (c *Context) ListCards(
 				msg = winErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardListCards() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardListCards() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
-		if cardsUtf16Len > 0 && cardsUtf16 != nil {
+		if cardsUtf16Len > 0 {
 			cardsUtf16 = cardsUtf16[:cardsUtf16Len]
 			cards, err = multiUtf16StringToStrings(cardsUtf16)
 			if err != nil {
 				cards = nil
-				err = fmt.Errorf("failed to parse cards names %v (%v))", cardsUtf16, err)
+				err = fmt.Errorf("failed to parse cards names %v (%w)", cardsUtf16, err)
 				return
 			}
 		}
@@ -3022,11 +3073,11 @@ func (c *Context) ListInterfaces(
 	var guidInterfacesLen dword
 	var cardNameUtf16Ptr *uint16
 
-	logger.Infof("ListInterfaces, IN : (context=0x%X, cardName=%v)",
+	logger.Infof("ListInterfaces, IN : (context=0x%.8X, cardName=%v)",
 		c.ctx, cardName)
 	defer func() {
-		logger.Infof("ListInterfaces, OUT: (context=0x%X, cardName=%v, guidInterfaces=%v)",
-			c.ctx, cardName, guidInterfaces)
+		logger.Infof("ListInterfaces, OUT: (context=0x%.8X, cardName=%v, guidInterfaces=%v, ret=0x%.8X)",
+			c.ctx, cardName, guidInterfaces, ret)
 	}()
 
 	if scardListInterfacesProc == nil {
@@ -3037,7 +3088,7 @@ func (c *Context) ListInterfaces(
 	if cardName != "" {
 		cardNameUtf16Ptr, err = stringToUtf16Ptr(cardName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse card name \"%s\" (%v)", cardName, err)
+			err = fmt.Errorf("failed to parse card name \"%s\" (%w)", cardName, err)
 			return
 		}
 	}
@@ -3053,7 +3104,7 @@ func (c *Context) ListInterfaces(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardListInterfaces() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardListInterfaces() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3071,7 +3122,7 @@ func (c *Context) ListInterfaces(
 			}
 			guidInterfaces = nil
 			ret = uint64(r)
-			err = fmt.Errorf("scardListInterfaces() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardListInterfaces() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
@@ -3101,11 +3152,11 @@ func (c *Context) GetProviderId(
 
 	var cardNameUtf16Ptr *uint16
 
-	logger.Infof("GetProviderId, IN : (context=0x%X, cardName=%v)",
+	logger.Infof("GetProviderId, IN : (context=0x%.8X, cardName=%v)",
 		c.ctx, cardName)
 	defer func() {
-		logger.Infof("GetProviderId, OUT: (context=0x%X, cardName=%v, guidProviderId=%v)",
-			c.ctx, cardName, guidProviderId)
+		logger.Infof("GetProviderId, OUT: (context=0x%.8X, cardName=%v, guidProviderId=%v, ret=0x%.8X)",
+			c.ctx, cardName, guidProviderId.String(), ret)
 	}()
 
 	if scardGetProviderIdProc == nil {
@@ -3116,7 +3167,7 @@ func (c *Context) GetProviderId(
 	if cardName != "" {
 		cardNameUtf16Ptr, err = stringToUtf16Ptr(cardName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse card name \"%s\" (%v)", cardName, err)
+			err = fmt.Errorf("failed to parse card name \"%s\" (%w)", cardName, err)
 			return
 		}
 	}
@@ -3132,7 +3183,7 @@ func (c *Context) GetProviderId(
 		}
 		guidProviderId = windows.GUID{}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetProviderId() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetProviderId() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3159,11 +3210,11 @@ func (c *Context) GetCardTypeProviderName(
 	var providerNameUtf16 []uint16
 	var providerNameUtf16Len dword
 
-	logger.Infof("GetCardTypeProviderName, IN : (context=0x%X, cardName=%v, providerId=%v)",
+	logger.Infof("GetCardTypeProviderName, IN : (context=0x%.8X, cardName=%v, providerId=%v)",
 		c.ctx, cardName, providerId)
 	defer func() {
-		logger.Infof("GetCardTypeProviderName, OUT: (context=0x%X, cardName=%v, providerId=%v, providerName=%v)",
-			c.ctx, cardName, providerId, providerName)
+		logger.Infof("GetCardTypeProviderName, OUT: (context=0x%.8X, cardName=%v, providerId=%v, providerName=%v, ret=0x%.8X)",
+			c.ctx, cardName, providerId, providerName, ret)
 	}()
 
 	if scardGetCardTypeProviderNameProc == nil {
@@ -3174,7 +3225,7 @@ func (c *Context) GetCardTypeProviderName(
 	if cardName != "" {
 		cardNameUtf16Ptr, err = stringToUtf16Ptr(cardName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse card name \"%s\" (%v)", cardName, err)
+			err = fmt.Errorf("failed to parse card name \"%s\" (%w)", cardName, err)
 			return
 		}
 	}
@@ -3191,7 +3242,7 @@ func (c *Context) GetCardTypeProviderName(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetCardTypeProviderName() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetCardTypeProviderName() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3209,16 +3260,16 @@ func (c *Context) GetCardTypeProviderName(
 				msg = winErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardGetCardTypeProviderName() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardGetCardTypeProviderName() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
-		if providerNameUtf16Len > 0 && providerNameUtf16 != nil {
+		if providerNameUtf16Len > 0 {
 			providerNameUtf16 = providerNameUtf16[:providerNameUtf16Len]
 			providerName, err = utf16ToString(providerNameUtf16)
 			if err != nil {
 				providerName = ""
-				err = fmt.Errorf("failed to parse provider name %v (%v))", providerNameUtf16, err)
+				err = fmt.Errorf("failed to parse provider name %v (%w)", providerNameUtf16, err)
 				return
 			}
 		}
@@ -3245,8 +3296,10 @@ func (c *Context) IntroduceReaderGroup(
 
 	var groupNameUtf16Ptr *uint16
 
-	logger.Infof("IntroduceReaderGroup, IN : (context=0x%X, groupName=%v)", c.ctx, groupName)
-	defer func() { logger.Infof("IntroduceReaderGroup, OUT: (context=0x%X, groupName=%v)", c.ctx, groupName) }()
+	logger.Infof("IntroduceReaderGroup, IN : (context=0x%.8X, groupName=%v)", c.ctx, groupName)
+	defer func() {
+		logger.Infof("IntroduceReaderGroup, OUT: (context=0x%.8X, groupName=%v, ret=0x%.8X)", c.ctx, groupName, ret)
+	}()
 
 	if scardIntroduceReaderGroupProc == nil {
 		err = fmt.Errorf("scardIntroduceReaderGroup() not found in winscard.dll")
@@ -3256,7 +3309,7 @@ func (c *Context) IntroduceReaderGroup(
 	if groupName != "" {
 		groupNameUtf16Ptr, err = stringToUtf16Ptr(groupName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse group name \"%s\" (%v)", groupName, err)
+			err = fmt.Errorf("failed to parse group name \"%s\" (%w)", groupName, err)
 			return
 		}
 	}
@@ -3270,7 +3323,7 @@ func (c *Context) IntroduceReaderGroup(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardIntroduceReaderGroup() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardIntroduceReaderGroup() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3295,8 +3348,10 @@ func (c *Context) ForgetReaderGroup(
 
 	var groupNameUtf16Ptr *uint16
 
-	logger.Infof("ForgetReaderGroup, IN : (context=0x%X, groupName=%v)", c.ctx, groupName)
-	defer func() { logger.Infof("ForgetReaderGroup, OUT: (context=0x%X, groupName=%v)", c.ctx, groupName) }()
+	logger.Infof("ForgetReaderGroup, IN : (context=0x%.8X, groupName=%v)", c.ctx, groupName)
+	defer func() {
+		logger.Infof("ForgetReaderGroup, OUT: (context=0x%.8X, groupName=%v, ret=0x%.8X)", c.ctx, groupName, ret)
+	}()
 
 	if scardForgetReaderGroupProc == nil {
 		err = fmt.Errorf("scardForgetReaderGroup() not found in winscard.dll")
@@ -3306,7 +3361,7 @@ func (c *Context) ForgetReaderGroup(
 	if groupName != "" {
 		groupNameUtf16Ptr, err = stringToUtf16Ptr(groupName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse group name \"%s\" (%v)", groupName, err)
+			err = fmt.Errorf("failed to parse group name \"%s\" (%w)", groupName, err)
 			return
 		}
 	}
@@ -3320,7 +3375,7 @@ func (c *Context) ForgetReaderGroup(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardForgetReaderGroup() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardForgetReaderGroup() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3344,11 +3399,11 @@ func (c *Context) IntroduceReader(
 	var readerNamesUtf16Ptr *uint16
 	var deviceNameUtf16Ptr *uint16
 
-	logger.Infof("IntroduceReader, IN : (context=0x%X, readerName=%v, deviceName=%s)",
+	logger.Infof("IntroduceReader, IN : (context=0x%.8X, readerName=%v, deviceName=%s)",
 		c.ctx, readerName, deviceName)
 	defer func() {
-		logger.Infof("IntroduceReader, OUT: (context=0x%X, readerName=%v, deviceName=%s)",
-			c.ctx, readerName, deviceName)
+		logger.Infof("IntroduceReader, OUT: (context=0x%.8X, readerName=%v, deviceName=%s, ret=0x%.8X)",
+			c.ctx, readerName, deviceName, ret)
 	}()
 
 	if scardIntroduceReaderProc == nil {
@@ -3359,7 +3414,7 @@ func (c *Context) IntroduceReader(
 	if readerName != "" {
 		readerNamesUtf16Ptr, err = stringToUtf16Ptr(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 	}
@@ -3367,7 +3422,7 @@ func (c *Context) IntroduceReader(
 	if deviceName != "" {
 		deviceNameUtf16Ptr, err = stringToUtf16Ptr(deviceName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse device name \"%s\" (%v)", deviceName, err)
+			err = fmt.Errorf("failed to parse device name \"%s\" (%w)", deviceName, err)
 			return
 		}
 	}
@@ -3382,7 +3437,7 @@ func (c *Context) IntroduceReader(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardIntroduceReader() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardIntroduceReader() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3406,11 +3461,11 @@ func (c *Context) ForgetReader(
 
 	var readerNamesUtf16Ptr *uint16
 
-	logger.Infof("ForgetReader, IN : (context=0x%X, readerName=%v)",
+	logger.Infof("ForgetReader, IN : (context=0x%.8X, readerName=%v)",
 		c.ctx, readerName)
 	defer func() {
-		logger.Infof("ForgetReader, OUT: (context=0x%X, readerName=%v)",
-			c.ctx, readerName)
+		logger.Infof("ForgetReader, OUT: (context=0x%.8X, readerName=%v, ret=0x%.8X)",
+			c.ctx, readerName, ret)
 	}()
 
 	if scardForgetReaderProc == nil {
@@ -3421,7 +3476,7 @@ func (c *Context) ForgetReader(
 	if readerName != "" {
 		readerNamesUtf16Ptr, err = stringToUtf16Ptr(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 	}
@@ -3435,7 +3490,7 @@ func (c *Context) ForgetReader(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardForgetReader() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardForgetReader() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3458,11 +3513,11 @@ func (c *Context) AddReaderToGroup(
 	var readerNamesUtf16Ptr *uint16
 	var groupNameUtf16Ptr *uint16
 
-	logger.Infof("ForgetReader, IN : (context=0x%X, readerName=%v, groupName=%v)",
+	logger.Infof("ForgetReader, IN : (context=0x%.8X, readerName=%v, groupName=%v)",
 		c.ctx, readerName, groupName)
 	defer func() {
-		logger.Infof("ForgetReader, OUT: (context=0x%X, readerName=%v, groupName=%v)",
-			c.ctx, readerName, groupName)
+		logger.Infof("ForgetReader, OUT: (context=0x%.8X, readerName=%v, groupName=%v, ret=0x%.8X)",
+			c.ctx, readerName, groupName, ret)
 	}()
 
 	if scardAddReaderToGroupProc == nil {
@@ -3473,7 +3528,7 @@ func (c *Context) AddReaderToGroup(
 	if readerName != "" {
 		readerNamesUtf16Ptr, err = stringToUtf16Ptr(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 	}
@@ -3481,7 +3536,7 @@ func (c *Context) AddReaderToGroup(
 	if groupName != "" {
 		groupNameUtf16Ptr, err = stringToUtf16Ptr(groupName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse group name \"%s\" (%v)", groupName, err)
+			err = fmt.Errorf("failed to parse group name \"%s\" (%w)", groupName, err)
 			return
 		}
 	}
@@ -3496,7 +3551,7 @@ func (c *Context) AddReaderToGroup(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardAddReaderToGroup() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardAddReaderToGroup() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3520,11 +3575,11 @@ func (c *Context) RemoveReaderFromGroup(
 	var readerNamesUtf16Ptr *uint16
 	var groupNameUtf16Ptr *uint16
 
-	logger.Infof("RemoveReaderFromGroup, IN : (context=0x%X, readerName=%v, groupName=%v)",
+	logger.Infof("RemoveReaderFromGroup, IN : (context=0x%.8X, readerName=%v, groupName=%v)",
 		c.ctx, readerName, groupName)
 	defer func() {
-		logger.Infof("RemoveReaderFromGroup, OUT: (context=0x%X, readerName=%v, groupName=%v)",
-			c.ctx, readerName, groupName)
+		logger.Infof("RemoveReaderFromGroup, OUT: (context=0x%.8X, readerName=%v, groupName=%v, ret=0x%.8X)",
+			c.ctx, readerName, groupName, ret)
 	}()
 
 	if scardRemoveReaderFromGroupProc == nil {
@@ -3535,7 +3590,7 @@ func (c *Context) RemoveReaderFromGroup(
 	if readerName != "" {
 		readerNamesUtf16Ptr, err = stringToUtf16Ptr(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 	}
@@ -3543,7 +3598,7 @@ func (c *Context) RemoveReaderFromGroup(
 	if groupName != "" {
 		groupNameUtf16Ptr, err = stringToUtf16Ptr(groupName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse group name \"%s\" (%v)", groupName, err)
+			err = fmt.Errorf("failed to parse group name \"%s\" (%w)", groupName, err)
 			return
 		}
 	}
@@ -3558,7 +3613,7 @@ func (c *Context) RemoveReaderFromGroup(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardRemoveReaderFromGroup() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardRemoveReaderFromGroup() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3590,11 +3645,11 @@ func (c *Context) IntroduceCardType(
 	var atrBytesPtr *byte
 	var atrMaskBytesPtr *byte
 
-	logger.Infof("IntroduceCardType, IN : (context=0x%X, cardName=%v, guidPrimaryProvider=%v, guidInterfaces=%v, atr=%v, atrMask=%v)",
+	logger.Infof("IntroduceCardType, IN : (context=0x%.8X, cardName=%v, guidPrimaryProvider=%v, guidInterfaces=%v, atr=%v, atrMask=%v)",
 		c.ctx, cardName, guidPrimaryProvider, guidInterfaces, atr, atrMask)
 	defer func() {
-		logger.Infof("IntroduceCardType, OUT: (context=0x%X, cardName=%v, guidPrimaryProvider=%v, guidInterfaces=%v, atr=%v, atrMask=%v)",
-			c.ctx, cardName, guidPrimaryProvider, guidInterfaces, atr, atrMask)
+		logger.Infof("IntroduceCardType, OUT: (context=0x%.8X, cardName=%v, guidPrimaryProvider=%v, guidInterfaces=%v, atr=%v, atrMask=%v, ret=0x%.8X)",
+			c.ctx, cardName, guidPrimaryProvider, guidInterfaces, atr, atrMask, ret)
 	}()
 
 	if scardIntroduceCardTypeProc == nil {
@@ -3617,14 +3672,14 @@ func (c *Context) IntroduceCardType(
 	if len(cardName) > 0 {
 		cardNameUtf16Ptr, err = stringToUtf16Ptr(cardName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse card name \"%s\" (%v)", cardName, err)
+			err = fmt.Errorf("failed to parse card name \"%s\" (%w)", cardName, err)
 			return
 		}
 	}
 	if len(atr) != 0 {
 		atrBytes, err = hexStringToByteArray(atr)
 		if err != nil {
-			err = fmt.Errorf("failed to parse atr \"%s\" (%v)", atr, err)
+			err = fmt.Errorf("failed to parse atr \"%s\" (%w)", atr, err)
 			return
 		}
 		atrBytesPtr = (*byte)(unsafe.Pointer(&atrBytes[0]))
@@ -3632,7 +3687,7 @@ func (c *Context) IntroduceCardType(
 	if len(atrMask) != 0 {
 		atrMaskBytes, err = hexStringToByteArray(atrMask)
 		if err != nil {
-			err = fmt.Errorf("failed to parse atr mask \"%s\" (%v)", atrMask, err)
+			err = fmt.Errorf("failed to parse atr mask \"%s\" (%w)", atrMask, err)
 			return
 		}
 		atrMaskBytesPtr = (*byte)(unsafe.Pointer(&atrMaskBytes[0]))
@@ -3656,7 +3711,7 @@ func (c *Context) IntroduceCardType(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardIntroduceCardType() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardIntroduceCardType() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3683,11 +3738,11 @@ func (c *Context) SetCardTypeProviderName(
 	var cardNameUtf16Ptr *uint16
 	var providerNameUtf16Ptr *uint16
 
-	logger.Infof("SetCardTypeProviderName, IN : (context=0x%X, cardName=%v, providerId=%v, providerName=%v)",
-		c.ctx, cardName, providerId, providerName)
+	logger.Infof("SetCardTypeProviderName, IN : (context=0x%.8X, cardName=%v, providerId=%v, providerName=%v)",
+		c.ctx, cardName, providerId.String(), providerName)
 	defer func() {
-		logger.Infof("SetCardTypeProviderName, OUT: (context=0x%X, cardName=%v, providerId=%v, providerName=%v)",
-			c.ctx, cardName, providerId, providerName)
+		logger.Infof("SetCardTypeProviderName, OUT: (context=0x%.8X, cardName=%v, providerId=%v, providerName=%v, ret=0x%.8X)",
+			c.ctx, cardName, providerId.String(), providerName, ret)
 	}()
 
 	if scardSetCardTypeProviderNameProc == nil {
@@ -3698,7 +3753,7 @@ func (c *Context) SetCardTypeProviderName(
 	if len(cardName) > 0 {
 		cardNameUtf16Ptr, err = stringToUtf16Ptr(cardName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse card name \"%s\" (%v)", cardName, err)
+			err = fmt.Errorf("failed to parse card name \"%s\" (%w)", cardName, err)
 			return
 		}
 	}
@@ -3706,7 +3761,7 @@ func (c *Context) SetCardTypeProviderName(
 	if len(providerName) > 0 {
 		providerNameUtf16Ptr, err = stringToUtf16Ptr(providerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse provider name \"%s\" (%v)", providerName, err)
+			err = fmt.Errorf("failed to parse provider name \"%s\" (%w)", providerName, err)
 			return
 		}
 	}
@@ -3722,7 +3777,7 @@ func (c *Context) SetCardTypeProviderName(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardSetCardTypeProviderName() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardSetCardTypeProviderName() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3744,11 +3799,11 @@ func (c *Context) ForgetCardType(
 
 	var cardNameUtf16Ptr *uint16
 
-	logger.Infof("ForgetCardType, IN : (context=0x%X, cardName=%v)",
+	logger.Infof("ForgetCardType, IN : (context=0x%.8X, cardName=%v)",
 		c.ctx, cardName)
 	defer func() {
-		logger.Infof("ForgetCardType, OUT: (context=0x%X, cardName=%v)",
-			c.ctx, cardName)
+		logger.Infof("ForgetCardType, OUT: (context=0x%.8X, cardName=%v, ret=0x%.8X)",
+			c.ctx, cardName, ret)
 	}()
 
 	if scardForgetCardTypeProc == nil {
@@ -3759,7 +3814,7 @@ func (c *Context) ForgetCardType(
 	if len(cardName) > 0 {
 		cardNameUtf16Ptr, err = stringToUtf16Ptr(cardName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse card name \"%s\" (%v)", cardName, err)
+			err = fmt.Errorf("failed to parse card name \"%s\" (%w)", cardName, err)
 			return
 		}
 	}
@@ -3773,7 +3828,7 @@ func (c *Context) ForgetCardType(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardForgetCardType() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardForgetCardType() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3799,11 +3854,11 @@ func (c *Context) ReadCache(
 	var dataLen dword
 	var lookupNameUtf16Ptr *uint16
 
-	logger.Infof("ReadCache, IN : (context=0x%X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v)",
+	logger.Infof("ReadCache, IN : (context=0x%.8X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v)",
 		c.ctx, cardIdentifier, freshnessCounter, lookupName)
 	defer func() {
-		logger.Infof("ReadCache, OUT: (context=0x%X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v)",
-			c.ctx, cardIdentifier, freshnessCounter, lookupName)
+		logger.Infof("ReadCache, OUT: (context=0x%.8X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v, data=%X, ret=0x%.8X)",
+			c.ctx, cardIdentifier, freshnessCounter, lookupName, data, ret)
 	}()
 
 	if scardReadCacheProc == nil {
@@ -3814,7 +3869,7 @@ func (c *Context) ReadCache(
 	if lookupName != "" {
 		lookupNameUtf16Ptr, err = stringToUtf16Ptr(lookupName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse lookup name \"%s\" (%v)", lookupName, err)
+			err = fmt.Errorf("failed to parse lookup name \"%s\" (%w)", lookupName, err)
 			return
 		}
 	}
@@ -3832,7 +3887,7 @@ func (c *Context) ReadCache(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardReadCache() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardReadCache() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3852,7 +3907,7 @@ func (c *Context) ReadCache(
 			}
 			data = nil
 			ret = uint64(r)
-			err = fmt.Errorf("scardReadCache() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardReadCache() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
@@ -3884,11 +3939,11 @@ func (c *Context) WriteCache(
 	var lookupNameUtf16Ptr *uint16
 	var dataPtr *byte
 
-	logger.Infof("WriteCache, IN : (context=0x%X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v, data=%v)",
+	logger.Infof("WriteCache, IN : (context=0x%.8X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v, data=%X)",
 		c.ctx, cardIdentifier, freshnessCounter, lookupName, data)
 	defer func() {
-		logger.Infof("WriteCache, OUT: (context=0x%X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v, data=%v)",
-			c.ctx, cardIdentifier, freshnessCounter, lookupName, data)
+		logger.Infof("WriteCache, OUT: (context=0x%.8X, cardIdentifier=%v, freshnessCounter=%v, lookupName=%v, data=%X, ret=0x%.8X)",
+			c.ctx, cardIdentifier, freshnessCounter, lookupName, data, ret)
 	}()
 
 	if scardWriteCacheProc == nil {
@@ -3899,7 +3954,7 @@ func (c *Context) WriteCache(
 	if lookupName != "" {
 		lookupNameUtf16Ptr, err = stringToUtf16Ptr(lookupName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse lookup name \"%s\" (%v)", lookupName, err)
+			err = fmt.Errorf("failed to parse lookup name \"%s\" (%w)", lookupName, err)
 			return
 		}
 	}
@@ -3920,7 +3975,7 @@ func (c *Context) WriteCache(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardWriteCache() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardWriteCache() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3945,11 +4000,11 @@ func (c *Context) GetReaderIcon(
 	var iconLen dword
 	var readerNameUtf16Ptr *uint16
 
-	logger.Infof("GetReaderIcon, IN : (context=0x%X, readerName=%v)",
+	logger.Infof("GetReaderIcon, IN : (context=0x%.8X, readerName=%v)",
 		c.ctx, readerName)
 	defer func() {
-		logger.Infof("GetReaderIcon, OUT: (context=0x%X, readerName=%v, icon=%v)",
-			c.ctx, readerName, icon)
+		logger.Infof("GetReaderIcon, OUT: (context=0x%.8X, readerName=%v, icon=%X, ret=0x%.8X)",
+			c.ctx, readerName, icon, ret)
 	}()
 
 	if scardGetReaderIconProc == nil {
@@ -3960,7 +4015,7 @@ func (c *Context) GetReaderIcon(
 	if readerName != "" {
 		readerNameUtf16Ptr, err = stringToUtf16Ptr(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 	}
@@ -3976,7 +4031,7 @@ func (c *Context) GetReaderIcon(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetReaderIcon() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetReaderIcon() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -3994,7 +4049,7 @@ func (c *Context) GetReaderIcon(
 			}
 			icon = nil
 			ret = uint64(r)
-			err = fmt.Errorf("scardGetReaderIcon() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardGetReaderIcon() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
@@ -4022,11 +4077,11 @@ func (c *Context) GetDeviceTypeId(
 
 	var readerNameUtf16Ptr *uint16
 
-	logger.Infof("GetDeviceTypeId, IN : (context=0x%X, readerName=%v)",
+	logger.Infof("GetDeviceTypeId, IN : (context=0x%.8X, readerName=%v)",
 		c.ctx, readerName)
 	defer func() {
-		logger.Infof("GetDeviceTypeId, OUT: (context=0x%X, readerName=%v, scardReaderType=%v)",
-			c.ctx, readerName, scardReaderType.String())
+		logger.Infof("GetDeviceTypeId, OUT: (context=0x%.8X, readerName=%v, scardReaderType=%v, ret=0x%.8X)",
+			c.ctx, readerName, scardReaderType.String(), ret)
 	}()
 
 	if scardGetDeviceTypeIdProc == nil {
@@ -4037,7 +4092,7 @@ func (c *Context) GetDeviceTypeId(
 	if readerName != "" {
 		readerNameUtf16Ptr, err = stringToUtf16Ptr(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 	}
@@ -4053,7 +4108,7 @@ func (c *Context) GetDeviceTypeId(
 		}
 		scardReaderType = 0
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetDeviceTypeId() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetDeviceTypeId() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -4079,11 +4134,11 @@ func (c *Context) GetReaderDeviceInstanceId(
 	var deviceInstanceIdUtf16Len dword
 	var readerNameUtf16Ptr *uint16
 
-	logger.Infof("GetReaderDeviceInstanceId, IN : (context=0x%X, readerName=%v)",
+	logger.Infof("GetReaderDeviceInstanceId, IN : (context=0x%.8X, readerName=%v)",
 		c.ctx, readerName)
 	defer func() {
-		logger.Infof("GetReaderDeviceInstanceId, OUT: (context=0x%X, readerName=%v, deviceInstanceId=%v)",
-			c.ctx, readerName, deviceInstanceId)
+		logger.Infof("GetReaderDeviceInstanceId, OUT: (context=0x%.8X, readerName=%v, deviceInstanceId=%v, ret=0x%.8X)",
+			c.ctx, readerName, deviceInstanceId, ret)
 	}()
 
 	if scardGetReaderDeviceInstanceIdProc == nil {
@@ -4094,7 +4149,7 @@ func (c *Context) GetReaderDeviceInstanceId(
 	if readerName != "" {
 		readerNameUtf16Ptr, err = stringToUtf16Ptr(readerName)
 		if err != nil {
-			err = fmt.Errorf("failed to parse reader name \"%s\" (%v)", readerName, err)
+			err = fmt.Errorf("failed to parse reader name \"%s\" (%w)", readerName, err)
 			return
 		}
 	}
@@ -4110,7 +4165,7 @@ func (c *Context) GetReaderDeviceInstanceId(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetReaderDeviceInstanceId() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetReaderDeviceInstanceId() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -4127,16 +4182,16 @@ func (c *Context) GetReaderDeviceInstanceId(
 				msg = winErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardGetReaderDeviceInstanceId() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardGetReaderDeviceInstanceId() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
-		if deviceInstanceIdUtf16Len > 0 && deviceInstanceIdUtf16 != nil {
+		if deviceInstanceIdUtf16Len > 0 {
 			deviceInstanceIdUtf16 = deviceInstanceIdUtf16[:deviceInstanceIdUtf16Len]
 			deviceInstanceId, err = utf16ToString(deviceInstanceIdUtf16)
 			if err != nil {
 				deviceInstanceId = ""
-				err = fmt.Errorf("failed to parse device instance id %v (%v)", deviceInstanceIdUtf16, err)
+				err = fmt.Errorf("failed to parse device instance id %v (%w)", deviceInstanceIdUtf16, err)
 				return
 			}
 		}
@@ -4165,11 +4220,11 @@ func (c *Context) ListReadersWithDeviceInstanceId(
 	var readersNamesUtf16Len dword
 	var deviceInstanceIdUtf16Ptr *uint16
 
-	logger.Infof("ListReadersWithDeviceInstanceId, IN : (context=0x%X, deviceInstanceId=%v)",
+	logger.Infof("ListReadersWithDeviceInstanceId, IN : (context=0x%.8X, deviceInstanceId=%v)",
 		c.ctx, deviceInstanceId)
 	defer func() {
-		logger.Infof("ListReadersWithDeviceInstanceId, OUT: (context=0x%X, deviceInstanceId=%v, readersNames=%v)",
-			c.ctx, deviceInstanceId, readersNames)
+		logger.Infof("ListReadersWithDeviceInstanceId, OUT: (context=0x%.8X, deviceInstanceId=%v, readersNames=%v, ret=0x%.8X)",
+			c.ctx, deviceInstanceId, readersNames, ret)
 	}()
 
 	if scardListReadersWithDeviceInstanceIdProc == nil {
@@ -4180,7 +4235,7 @@ func (c *Context) ListReadersWithDeviceInstanceId(
 	if deviceInstanceId != "" {
 		deviceInstanceIdUtf16Ptr, err = stringToUtf16Ptr(deviceInstanceId)
 		if err != nil {
-			err = fmt.Errorf("failed to parse device instance id \"%s\" (%v)", deviceInstanceId, err)
+			err = fmt.Errorf("failed to parse device instance id \"%s\" (%w)", deviceInstanceId, err)
 			return
 		}
 	}
@@ -4196,7 +4251,7 @@ func (c *Context) ListReadersWithDeviceInstanceId(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardListReadersWithDeviceInstanceId() 1st call returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardListReadersWithDeviceInstanceId() 1st call returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -4213,16 +4268,16 @@ func (c *Context) ListReadersWithDeviceInstanceId(
 				msg = winErr
 			}
 			ret = uint64(r)
-			err = fmt.Errorf("scardListReadersWithDeviceInstanceId() 2nd call returned 0x%X [%v]", r, msg)
+			err = fmt.Errorf("scardListReadersWithDeviceInstanceId() 2nd call returned 0x%.8X [%w]", r, msg)
 			return
 		}
 
-		if readersNamesUtf16Len > 0 && readersNamesUtf16 != nil {
+		if readersNamesUtf16Len > 0 {
 			readersNamesUtf16 = readersNamesUtf16[:readersNamesUtf16Len]
 			readersNames, err = multiUtf16StringToStrings(readersNamesUtf16)
 			if err != nil {
 				readersNames = nil
-				err = fmt.Errorf("failed to parse readers names %v (%v)", readersNamesUtf16, err)
+				err = fmt.Errorf("failed to parse readers names %v (%w)", readersNamesUtf16, err)
 				return
 			}
 		}
@@ -4241,8 +4296,10 @@ func (c *Context) Audit(
 		}
 	}()
 
-	logger.Infof("Audit, IN : (context=0x%X, event=%v)", c.ctx, event.String())
-	defer func() { logger.Infof("Audit, OUT: (context=0x%X, event=%v)", c.ctx, event.String()) }()
+	logger.Infof("Audit, IN : (context=0x%.8X, event=%v)", c.ctx, event.String())
+	defer func() {
+		logger.Infof("Audit, OUT: (context=0x%.8X, event=%v, ret=0x%.8X)", c.ctx, event.String(), ret)
+	}()
 
 	if scardAuditProc == nil {
 		err = fmt.Errorf("scardAudit() not found in winscard.dll")
@@ -4258,7 +4315,7 @@ func (c *Context) Audit(
 			msg = winErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardAudit() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardAudit() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 

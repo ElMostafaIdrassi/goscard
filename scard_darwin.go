@@ -109,9 +109,11 @@ func (c *Context) GetStatusChange(
 	var internalReaderStatesBytes []byte
 	var readersNamesLen []int // need to keep the length of the reader name to be able to convert the *byte back to a string
 
-	logger.Infof("GetStatusChange, IN : (context=0x%X, timeout=%vms, readerStates=%v)",
+	logger.Infof("GetStatusChange, IN : (context=0x%.8X, timeout=%vms, readerStates=%+v)",
 		c.ctx, timeout.Milliseconds(), readerStates)
-	defer func() { logger.Infof("GetStatusChange, OUT: (context=0x%X, readerStates=%v)", c.ctx, readerStates) }()
+	defer func() {
+		logger.Infof("GetStatusChange, OUT: (context=0x%.8X, readerStates=%+v, ret=0x%.8X)", c.ctx, readerStates, ret)
+	}()
 
 	if scardGetStatusChangeProc == nil {
 		err = fmt.Errorf("scardGetStatusChange() not found in pcsc")
@@ -131,7 +133,7 @@ func (c *Context) GetStatusChange(
 		}
 		internalReaderStatesBytes, err = encodeReaderStateArray(internalReaderStates)
 		if err != nil {
-			err = fmt.Errorf("failed to encode readers states (%v)", err)
+			err = fmt.Errorf("failed to encode readers states (%w)", err)
 			return
 		}
 	}
@@ -148,13 +150,13 @@ func (c *Context) GetStatusChange(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardGetStatusChange() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardGetStatusChange() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
 	newInternalReaderStates, err := decodeReaderStateArray(internalReaderStatesBytes, len(readerStates))
 	if err != nil {
-		err = fmt.Errorf("failed to decode readers states (%v)", err)
+		err = fmt.Errorf("failed to decode readers states (%w)", err)
 		return
 	}
 
@@ -191,8 +193,10 @@ func (c *Card) Control(
 	var bytesReturned dword
 	var r dword
 
-	logger.Infof("Control, IN : (handle=0x%X, inBuffer=%v)", c.handle, inBuffer)
-	defer func() { logger.Infof("Control, OUT: (handle=0x%X, outBuffer=%v)", c.handle, outBuffer) }()
+	logger.Infof("Control, IN : (handle=0x%.8X, controlCode=0x%.8X, inBuffer=%X)", c.handle, scardControlCode, inBuffer)
+	defer func() {
+		logger.Infof("Control, OUT: (handle=0x%.8X, controlCode=0x%.8X, inBuffer=%X, outBuffer=%X, ret=0x%.8X)", c.handle, scardControlCode, inBuffer, outBuffer, ret)
+	}()
 
 	if scardControlProc == nil {
 		err = fmt.Errorf("scardControl() not found in pcsc")
@@ -264,7 +268,7 @@ func (c *Card) Control(
 		}
 		outBuffer = nil
 		ret = uint64(r)
-		err = fmt.Errorf("scardControl() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardControl() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -289,9 +293,11 @@ func (c *Context) SetTimeout(
 		return
 	}
 
-	logger.Infof("SetTimeout, IN : (context=0x%X, timeout=%vms)",
+	logger.Infof("SetTimeout, IN : (context=0x%.8X, timeout=%vms)",
 		c.ctx, timeout.Milliseconds())
-	defer func() { logger.Infof("SetTimeout, OUT: (context=0x%X)", c.ctx) }()
+	defer func() {
+		logger.Infof("SetTimeout, OUT: (context=0x%.8X, ret=0x%.8X)", c.ctx, ret)
+	}()
 
 	r := scardSetTimeoutProc(
 		c.ctx,
@@ -303,7 +309,7 @@ func (c *Context) SetTimeout(
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardSetTimeout() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardSetTimeout() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
@@ -317,8 +323,10 @@ func (c *Card) CancelTransaction() (ret uint64, err error) {
 		}
 	}()
 
-	logger.Infof("CancelTransaction, IN : (handle=0x%X)", c.handle)
-	defer func() { logger.Infof("CancelTransaction, OUT: (handle=0x%X)", c.handle) }()
+	logger.Infof("CancelTransaction, IN : (handle=0x%.8X)", c.handle)
+	defer func() {
+		logger.Infof("CancelTransaction, OUT: (handle=0x%.8X, ret=0x%.8X)", c.handle, ret)
+	}()
 
 	if scardCancelTransactionProc == nil {
 		err = fmt.Errorf("scardCancelTransaction() not found in pcsc")
@@ -334,7 +342,7 @@ func (c *Card) CancelTransaction() (ret uint64, err error) {
 			msg = pcscErr
 		}
 		ret = uint64(r)
-		err = fmt.Errorf("scardCancelTransaction() returned 0x%X [%v]", r, msg)
+		err = fmt.Errorf("scardCancelTransaction() returned 0x%.8X [%w]", r, msg)
 		return
 	}
 
