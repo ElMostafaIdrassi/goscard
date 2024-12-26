@@ -28,7 +28,14 @@ func main() {
 	var ioSendPci goscard.SCardIORequest
 	var selectPivAppletAPDU []byte = []byte{0x00, 0xA4, 0x04, 0x00, 0x09, 0xA0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00, 0x00}
 
-	err := goscard.Initialize(goscard.NewDefaultLogger(goscard.LogLevelNone))
+	logFilePath := "pcsc_example.log"
+	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		fmt.Printf("\nERROR: Log file creation failed (err=%v)\n", err)
+		os.Exit(1)
+	}
+
+	err = goscard.Initialize(goscard.NewDefaultFileLogger(goscard.LogLevelDebug, logFile))
 	if err != nil {
 		fmt.Printf("\nERROR: Initialize failed (err=%v)\n", err)
 		os.Exit(1)

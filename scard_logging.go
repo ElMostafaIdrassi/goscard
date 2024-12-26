@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-var logger Logger = NewDefaultLogger(LogLevelInfo)
+var logger Logger = NewDefaultStdoutLogger(LogLevelInfo)
 
 type LogLevel int
 
@@ -38,9 +38,16 @@ type defaultLogger struct {
 	Level LogLevel
 }
 
-func NewDefaultLogger(level LogLevel) Logger {
+func NewDefaultStdoutLogger(level LogLevel) Logger {
 	return &defaultLogger{
-		Logger: log.New(os.Stderr, "", log.LstdFlags),
+		Logger: log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds|log.LUTC),
+		Level:  level,
+	}
+}
+
+func NewDefaultFileLogger(level LogLevel, file *os.File) Logger {
+	return &defaultLogger{
+		Logger: log.New(file, "", log.LstdFlags|log.Lmicroseconds|log.LUTC),
 		Level:  level,
 	}
 }

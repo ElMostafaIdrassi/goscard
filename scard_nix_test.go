@@ -47,14 +47,26 @@ var (
 func TestMain(m *testing.M) {
 	flag.BoolVar(&verbose, "verbose", false, "Run tests in verbose mode")
 	flag.Parse()
-	if verbose {
-		testLogger = NewDefaultLogger(LogLevelDebug)
-	} else {
-		testLogger = NewDefaultLogger(LogLevelNone)
+
+	logFilePath := "scard_nix_test.log"
+	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		testLogger = NewDefaultStdoutLogger(LogLevelError)
+		testLogger.Errorf("Log file creation failed: %v", err)
+		os.Exit(1)
 	}
 
-	Initialize(testLogger)
-	defer Finalize()
+	if verbose {
+		testLogger = NewDefaultFileLogger(LogLevelDebug, logFile)
+	} else {
+		testLogger = NewDefaultFileLogger(LogLevelNone, logFile)
+	}
+
+	err = Initialize(testLogger)
+	if err != nil {
+		testLogger.Errorf("Initialize failed: %v", err)
+		os.Exit(1)
+	}
 
 	exitCode := m.Run()
 	os.Exit(exitCode)
