@@ -66,6 +66,10 @@ func NewDefaultFileLogger(level LogLevel, file *os.File) Logger {
 	}
 }
 
+func NewDefaultLogger(level LogLevel) Logger {
+	return NewDefaultStdoutLogger(level)
+}
+
 func (l *defaultLogger) Debugf(format string, v ...interface{}) {
 	if l.Logger != nil && l.Level <= LogLevelDebug {
 		l.Logger.Printf("[DEBU] %s\n", fmt.Sprintf(format, v...))
